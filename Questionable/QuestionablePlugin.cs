@@ -5,6 +5,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
+using ECommons.LanguageHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller;
@@ -61,6 +62,9 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         ArgumentNullException.ThrowIfNull(pluginInterface);
         ArgumentNullException.ThrowIfNull(chatGui);
         ECommonsMain.Init(pluginInterface, this, Module.DalamudReflector);
+        Localization.Init(pluginInterface.UiLanguage is "tw" or "zh" or "zh-Hant" or "zh-Hans"
+            ? "ChineseTraditional"
+            : "English");
 
         try
         {

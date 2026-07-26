@@ -1,4 +1,5 @@
 using ImGuiNET;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Model;
 using Questionable.Model.Questing;
@@ -23,10 +24,10 @@ internal sealed class QuestSelector(QuestRegistry questRegistry)
         }
 
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-        if (ImGui.BeginCombo("##QuestSelection", "Add Quest...", ImGuiComboFlags.HeightLarge))
+        if (ImGui.BeginCombo("##QuestSelection", "Add Quest...".Loc(), ImGuiComboFlags.HeightLarge))
         {
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            bool addFirst = ImGui.InputTextWithHint("", "Filter...", ref _searchString, 256,
+            bool addFirst = ImGui.InputTextWithHint("", "Filter...".Loc(), ref _searchString, 256,
                 ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue);
 
             IEnumerable<Quest> foundQuests;

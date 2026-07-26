@@ -8,6 +8,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using ECommons.ImGuiMethods;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.External;
 using System;
@@ -34,14 +35,14 @@ internal sealed class PluginConfigComponent
             """
             vnavmesh handles the navigation within a zone, moving
             your character to the next quest-related objective.
-            """,
+            """.Loc(),
             new("https://github.com/awgil/ffxiv_navmesh/"),
             new("https://puni.sh/api/repository/veyn")),
         new("Lifestream",
             "Lifestream",
             """
             Used to travel to aethernet shards in cities.
-            """,
+            """.Loc(),
             new("https://github.com/NightmareXIV/Lifestream"),
             new("https://github.com/NightmareXIV/MyDalamudPlugins/raw/main/pluginmaster.json")),
         new("TextAdvance",
@@ -49,7 +50,7 @@ internal sealed class PluginConfigComponent
             """
             Automatically accepts and turns in quests, skips cutscenes
             and dialogue.
-            """,
+            """.Loc(),
             new("https://github.com/NightmareXIV/TextAdvance"),
             new("https://github.com/NightmareXIV/MyDalamudPlugins/raw/main/pluginmaster.json"))
     ];
@@ -87,36 +88,36 @@ internal sealed class PluginConfigComponent
             "Automaton",
             """
             Automaton is a collection of automation-related tweaks.
-            """,
+            """.Loc(),
             new("https://github.com/Jaksuhn/Automaton"),
             new("https://puni.sh/api/repository/croizat"),
             "/cbt",
             [
-                new("'Sniper no sniping' enabled",
-                    "Automatically completes sniping tasks introduced in Stormblood",
+                new("'Sniper no sniping' enabled".Loc(),
+                    "Automatically completes sniping tasks introduced in Stormblood".Loc(),
                     () => automatonIpc.IsAutoSnipeEnabled)
             ]),
         new("Pandora's Box",
             "PandorasBox",
             """
             Pandora's Box is a collection of tweaks.
-            """,
+            """.Loc(),
             new("https://github.com/PunishXIV/PandorasBox"),
             new("https://puni.sh/api/plugins"),
             "/pandora",
             [
-                new("'Auto Active Time Maneuver' enabled",
+                new("'Auto Active Time Maneuver' enabled".Loc(),
                     """
                     Automatically completes active time maneuvers in
                     single player instances, trials and raids"
-                    """,
+                    """.Loc(),
                     () => pandorasBoxIpc.IsAutoActiveTimeManeuverEnabled)
             ]),
         new("Artisan",
             "Artisan",
             """
             Automates crafting
-            """,
+            """.Loc(),
             new("https://github.com/PunishXIV/Artisan"),
             new("https://puni.sh/api/plugins"),
             "/artisan")
@@ -125,7 +126,7 @@ internal sealed class PluginConfigComponent
 
     public override void DrawTab()
     {
-        using var tab = ImRaii.TabItem("Dependencies###Plugins");
+        using var tab = ImRaii.TabItem($"{"Dependencies".Loc()}###Plugins");
         if (!tab)
         {
             return;
@@ -139,12 +140,12 @@ internal sealed class PluginConfigComponent
 
         if (allRequiredInstalled)
         {
-            ImGui.TextColored(ImGuiColors.ParsedGreen, "All required plugins are installed.");
+            ImGui.TextColored(ImGuiColors.ParsedGreen, "All required plugins are installed.".Loc());
         }
         else
         {
             ImGui.TextColored(ImGuiColors.DalamudRed,
-                "Required plugins are missing, Questionable will not work properly.");
+                "Required plugins are missing, Questionable will not work properly.".Loc());
         }
     }
 
@@ -157,7 +158,7 @@ internal sealed class PluginConfigComponent
                                ImGui.GetStyle().ItemSpacing.X;
         }
 
-        ImGui.Text("Questionable requires the following plugins to work:");
+        ImGui.Text("Questionable requires the following plugins to work:".Loc());
         allRequiredInstalled = true;
         using (ImRaii.PushIndent())
         {
@@ -171,13 +172,13 @@ internal sealed class PluginConfigComponent
         ImGui.Separator();
         ImGui.Spacing();
 
-        ImGui.Text("Questionable recommends Boss Mod (VBM) for rotation/combat automation.");
+        ImGui.Text("Questionable recommends Boss Mod (VBM) for rotation/combat automation.".Loc());
 
         using (ImRaii.Disabled(_combatController.IsRunning))
         {
             using (ImRaii.PushIndent())
             {
-                if (ImGui.RadioButton("No rotation/combat plugin (combat must be done manually)",
+                if (ImGui.RadioButton("No rotation/combat plugin (combat must be done manually)".Loc(),
                     _configuration.General.CombatModule == Configuration.ECombatModule.None))
                 {
                     _configuration.General.CombatModule = Configuration.ECombatModule.None;
@@ -186,7 +187,7 @@ internal sealed class PluginConfigComponent
 
                 allRequiredInstalled &= DrawCombatPlugin(Configuration.ECombatModule.BossMod, checklistPadding);
             }
-            ImGui.Text("The following rotation/combat plugin(s) are provided for compatibility and testing purposes:");
+            ImGui.Text("The following rotation/combat plugin(s) are provided for compatibility and testing purposes:".Loc());
             using (ImRaii.PushIndent())
             {
                 allRequiredInstalled &=
@@ -198,7 +199,7 @@ internal sealed class PluginConfigComponent
         ImGui.Separator();
         ImGui.Spacing();
 
-        ImGui.Text("The following plugins are recommended, but not required:");
+        ImGui.Text("The following plugins are recommended, but not required:".Loc());
         using (ImRaii.PushIndent())
         {
             foreach(PluginInfo plugin in _recommendedPlugins)
@@ -297,7 +298,7 @@ internal sealed class PluginConfigComponent
             {
                 if (!allDetailsOk && plugin.ConfigCommand != null && plugin.ConfigCommand.StartsWith('/'))
                 {
-                    if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Cog, "Open configuration"))
+                    if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Cog, "Open configuration".Loc()))
                     {
                         _commandManager.ProcessCommand(plugin.ConfigCommand);
                     }
@@ -305,7 +306,7 @@ internal sealed class PluginConfigComponent
             }
             else
             {
-                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Globe, "Open Website"))
+                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Globe, "Open Website".Loc()))
                 {
                     Util.OpenLink(plugin.WebsiteUri.ToString());
                 }
@@ -313,7 +314,7 @@ internal sealed class PluginConfigComponent
                 ImGui.SameLine();
                 if (plugin.DalamudRepositoryUri != null)
                 {
-                    if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Code, "Open Repository"))
+                    if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Code, "Open Repository".Loc()))
                     {
                         Util.OpenLink(plugin.DalamudRepositoryUri.ToString());
                     }
@@ -321,7 +322,7 @@ internal sealed class PluginConfigComponent
                 else
                 {
                     ImGui.AlignTextToFramePadding();
-                    ImGuiComponents.HelpMarker("Available on official Dalamud Repository");
+                    ImGuiComponents.HelpMarker("Available on official Dalamud Repository".Loc());
                 }
             }
         }

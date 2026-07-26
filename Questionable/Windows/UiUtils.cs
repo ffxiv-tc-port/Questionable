@@ -2,6 +2,7 @@
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Plugin;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Questionable.Functions;
 using Questionable.Model.Questing;
@@ -17,38 +18,38 @@ internal sealed class UiUtils(QuestFunctions questFunctions, IDalamudPluginInter
     {
         if (_questFunctions.IsQuestAccepted(elementId))
         {
-            return (ImGuiColors.DalamudYellow, FontAwesomeIcon.PersonWalkingArrowRight, "Active");
+            return (ImGuiColors.DalamudYellow, FontAwesomeIcon.PersonWalkingArrowRight, "Active".Loc());
         }
         else if (elementId is QuestId questId && _questFunctions.IsDailyAlliedSocietyQuestAndAvailableToday(questId))
         {
             if (!_questFunctions.IsReadyToAcceptQuest(questId))
             {
-                return (ImGuiColors.ParsedGreen, FontAwesomeIcon.Check, "Complete");
+                return (ImGuiColors.ParsedGreen, FontAwesomeIcon.Check, "Complete".Loc());
             }
             else if (_questFunctions.IsQuestComplete(questId))
             {
-                return (ImGuiColors.ParsedBlue, FontAwesomeIcon.Running, "Available");
+                return (ImGuiColors.ParsedBlue, FontAwesomeIcon.Running, "Available".Loc());
             }
             else
             {
-                return (ImGuiColors.DalamudYellow, FontAwesomeIcon.Running, "Available");
+                return (ImGuiColors.DalamudYellow, FontAwesomeIcon.Running, "Available".Loc());
             }
         }
         else if (_questFunctions.IsQuestAcceptedOrComplete(elementId))
         {
-            return (ImGuiColors.ParsedGreen, FontAwesomeIcon.Check, "Complete");
+            return (ImGuiColors.ParsedGreen, FontAwesomeIcon.Check, "Complete".Loc());
         }
         else if (_questFunctions.IsQuestUnobtainable(elementId))
         {
-            return (ImGuiColors.DalamudGrey, FontAwesomeIcon.Minus, "Unobtainable");
+            return (ImGuiColors.DalamudGrey, FontAwesomeIcon.Minus, "Unobtainable".Loc());
         }
         else if (_questFunctions.IsQuestLocked(elementId))
         {
-            return (ImGuiColors.DalamudRed, FontAwesomeIcon.Times, "Locked");
+            return (ImGuiColors.DalamudRed, FontAwesomeIcon.Times, "Locked".Loc());
         }
         else
         {
-            return (ImGuiColors.DalamudYellow, FontAwesomeIcon.Running, "Available");
+            return (ImGuiColors.DalamudYellow, FontAwesomeIcon.Running, "Available".Loc());
         }
     }
 

@@ -5,6 +5,7 @@ using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Common.Math;
 using Questionable.Controller;
 using Questionable.Data;
@@ -44,15 +45,15 @@ internal sealed class QuestValidationWindow : LWindow
         using var table = ImRaii.Table("QuestSelection", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY);
         if (!table)
         {
-            ImGui.Text("Not table");
+            ImGui.Text("Not table".Loc());
             return;
         }
 
-        ImGui.TableSetupColumn("Quest", ImGuiTableColumnFlags.WidthFixed, 50);
+        ImGui.TableSetupColumn("Quest".Loc(), ImGuiTableColumnFlags.WidthFixed, 50);
         ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 200);
-        ImGui.TableSetupColumn("Seq", ImGuiTableColumnFlags.WidthFixed, 30);
-        ImGui.TableSetupColumn("Step", ImGuiTableColumnFlags.WidthFixed, 30);
-        ImGui.TableSetupColumn("Issue", ImGuiTableColumnFlags.None, 200);
+        ImGui.TableSetupColumn("Seq".Loc(), ImGuiTableColumnFlags.WidthFixed, 30);
+        ImGui.TableSetupColumn("Step".Loc(), ImGuiTableColumnFlags.WidthFixed, 30);
+        ImGui.TableSetupColumn("Issue".Loc(), ImGuiTableColumnFlags.None, 200);
         ImGui.TableHeadersRow();
 
         foreach(ValidationIssue validationIssue in _questValidator.Issues)
@@ -69,7 +70,7 @@ internal sealed class QuestValidationWindow : LWindow
                     bool copy = ImGuiComponents.IconButton(FontAwesomeIcon.Copy);
                     if (ImGui.IsItemHovered())
                     {
-                        ImGui.SetTooltip("Copy as file name");
+                        ImGui.SetTooltip("Copy as file name".Loc());
                     }
                     if (copy)
                     {
@@ -80,7 +81,7 @@ internal sealed class QuestValidationWindow : LWindow
                     bool sim = ImGuiComponents.IconButton(FontAwesomeIcon.Play, new(16));
                     if (ImGui.IsItemHovered())
                     {
-                        ImGui.SetTooltip("Simulate quest");
+                        ImGui.SetTooltip("Simulate quest".Loc());
                     }
                     if (sim)
                     {

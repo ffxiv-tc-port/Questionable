@@ -4,6 +4,7 @@ using Dalamud.Interface.Colors;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Controller.GameUi;
 using Questionable.Data;
@@ -99,7 +100,7 @@ internal sealed class QuestWindow : LWindow, IPersistableWindowConfig
             ShowTooltip = () =>
             {
                 ImGui.BeginTooltip();
-                ImGui.Text("Open Configuration");
+                ImGui.Text("Open Configuration".Loc());
                 ImGui.EndTooltip();
             }
         });
@@ -166,7 +167,7 @@ internal sealed class QuestWindow : LWindow, IPersistableWindowConfig
             string notice = "";
             if (notice.Length != 0)
             {
-                ImGui.TextColored(ImGuiColors.DPSRed, "Notice");
+                ImGui.TextColored(ImGuiColors.DPSRed, "Notice".Loc());
                 ImGui.TextWrapped(notice);
                 ImGui.Separator();
             }

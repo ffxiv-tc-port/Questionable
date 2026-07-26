@@ -40,6 +40,12 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Content Include="LanguageChineseTraditional.ini">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup>
         <None Remove="Controller\CombatModules\BossModPreset_Overworld.json"/>
         <None Remove="Controller\CombatModules\BossModPreset_QuestBattle.json"/>
         <None Remove="Controller\CombatModules\BossModPreset_NormalMovement.json"/>

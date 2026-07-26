@@ -7,7 +7,7 @@
     "quests",
     "msq"
   ],
-  "RepoUrl": "https://github.com/PunishXIV/Questionable",
-  "IconUrl": "https://qstxiv.github.io/icons/Questionable.png",
-  "DalamudApiLevel": 15
+  "RepoUrl": "https://github.com/ffxiv-tc-port/Questionable",
+  "IconUrl": "https://raw.githubusercontent.com/ffxiv-tc-port/DalamudPluginsTC/main/icons/Questionable.png",
+  "DalamudApiLevel": 12
 }

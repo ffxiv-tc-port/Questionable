@@ -3,6 +3,7 @@ using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Data;
 using Questionable.Model;
@@ -28,23 +29,23 @@ internal sealed class QuestRewardComponent
 
     public void DrawItemRewards()
     {
-        using var tab = ImRaii.TabItem("Item Rewards");
+        using var tab = ImRaii.TabItem("Item Rewards".Loc());
         if (!tab)
         {
             return;
         }
 
-        ImGui.Checkbox("Show rewards from seasonal event quests", ref _showEventRewards);
+        ImGui.Checkbox("Show rewards from seasonal event quests".Loc(), ref _showEventRewards);
         ImGui.Spacing();
 
         ImGui.BulletText(
-            "Only untradeable items are listed (e.g. the Wind-up Airship can be sold on the market board).");
+            "Only untradeable items are listed (e.g. the Wind-up Airship can be sold on the market board).".Loc());
 
-        DrawGroup("Mounts", EItemRewardType.Mount);
-        DrawGroup("Minions", EItemRewardType.Minion);
-        DrawGroup("Orchestrion Rolls", EItemRewardType.OrchestrionRoll);
-        DrawGroup("Triple Triad Cards", EItemRewardType.TripleTriadCard);
-        DrawGroup("Fashion Accessories", EItemRewardType.FashionAccessory);
+        DrawGroup("Mounts".Loc(), EItemRewardType.Mount);
+        DrawGroup("Minions".Loc(), EItemRewardType.Minion);
+        DrawGroup("Orchestrion Rolls".Loc(), EItemRewardType.OrchestrionRoll);
+        DrawGroup("Triple Triad Cards".Loc(), EItemRewardType.TripleTriadCard);
+        DrawGroup("Fashion Accessories".Loc(), EItemRewardType.FashionAccessory);
     }
 
     private void DrawGroup(string label, EItemRewardType type)
@@ -81,7 +82,7 @@ internal sealed class QuestRewardComponent
                 if (_uiUtils.ChecklistItem(name, color, icon))
                 {
                     using var tooltip = ImRaii.Tooltip();
-                    ImGui.Text($"Obtained from: {questInfo.Name}");
+                    ImGui.Text($"{"Obtained from".Loc()}: {questInfo.Name}");
                     using (ImRaii.PushIndent())
                     {
                         _questTooltipComponent.DrawInner(questInfo, false);

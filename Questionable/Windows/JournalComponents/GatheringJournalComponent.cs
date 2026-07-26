@@ -5,6 +5,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons.ExcelServices;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
@@ -153,14 +154,14 @@ internal sealed class GatheringJournalComponent
 
     public void DrawGatheringItems()
     {
-        using var tab = ImRaii.TabItem("Gathering Points");
+        using var tab = ImRaii.TabItem("Gathering Points".Loc());
         if (!tab)
         {
             return;
         }
 
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-        if (ImGui.InputTextWithHint(string.Empty, "Search areas, gathering points and items", ref _searchText, 256))
+        if (ImGui.InputTextWithHint(string.Empty, "Search areas, gathering points and items".Loc(), ref _searchText, 256))
         {
             UpdateFilter();
         }
@@ -173,9 +174,9 @@ internal sealed class GatheringJournalComponent
                 return;
             }
 
-            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.NoHide);
-            ImGui.TableSetupColumn("Supported", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
-            ImGui.TableSetupColumn("Collected", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.NoHide);
+            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Collected".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
             ImGui.TableHeadersRow();
 
             foreach(FilteredExpansion expansion in _filteredExpansions)
@@ -185,7 +186,7 @@ internal sealed class GatheringJournalComponent
         }
         else
         {
-            ImGui.Text("No area, gathering point or item matches your search text.");
+            ImGui.Text("No area, gathering point or item matches your search text.".Loc());
         }
     }
 
