@@ -69,7 +69,7 @@ internal sealed class JournalProgressWindow : LWindow, IDisposable
 
     public override void DrawContent()
     {
-        using ImRaii.TabBarDisposable tabBar = ImRaii.TabBar("Journal");
+        using var tabBar = ImRaii.TabBar("Journal");
         if (!tabBar)
         {
             return;

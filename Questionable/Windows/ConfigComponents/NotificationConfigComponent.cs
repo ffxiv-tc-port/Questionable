@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using Dalamud.Game.Text;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
@@ -16,7 +16,7 @@ internal sealed class NotificationConfigComponent
 
     public override void DrawTab()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Notifications###Notifications");
+        using var tab = ImRaii.TabItem("Notifications###Notifications");
         if (!tab)
         {
             return;

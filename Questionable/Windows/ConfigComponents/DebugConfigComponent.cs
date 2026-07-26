@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
@@ -11,7 +11,7 @@ internal sealed class DebugConfigComponent(IDalamudPluginInterface pluginInterfa
 {
     public override void DrawTab()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Advanced###Debug");
+        using var tab = ImRaii.TabItem("Advanced###Debug");
         if (!tab)
         {
             return;

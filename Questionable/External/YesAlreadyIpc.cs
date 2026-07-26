@@ -1,4 +1,5 @@
-﻿using Dalamud.Plugin.Services;
+﻿using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
 using ECommons.DalamudServices;
 using ECommons.EzIpcManager;
 using ECommons.Reflection;
@@ -77,13 +78,13 @@ internal sealed class YesAlreadyIpc : IDisposable
     {
         internal static bool IsReady(string pluginName)
         {
-            return DalamudReflector.TryGetDalamudPlugin(pluginName, out object _, false, true);
+            return DalamudReflector.TryGetDalamudPlugin(pluginName, out IDalamudPlugin? _, false, true);
         }
 
         internal static Version? Version(string pluginName)
         {
             Version _version;
-            if (DalamudReflector.TryGetDalamudPlugin(pluginName, out object? dalamudPlugin, false, true))
+            if (DalamudReflector.TryGetDalamudPlugin(pluginName, out IDalamudPlugin? dalamudPlugin, false, true))
             {
                 _version = dalamudPlugin.GetType().Assembly.GetName().Version ?? new Version(0, 0, 0, 0);
             }

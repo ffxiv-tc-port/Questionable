@@ -88,7 +88,7 @@ internal sealed class HelpUiController : IDisposable
         if (_questController.StartedQuest?.Quest.Id.Value == 4526)
         {
             _logger.LogInformation("Closing Unending Codex");
-            AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
+            AtkUnitBase* addon = (AtkUnitBase*)args.Addon;
             addon->FireCallbackInt(-2);
         }
     }
@@ -97,7 +97,7 @@ internal sealed class HelpUiController : IDisposable
     {
         if (_questController.StartedQuest?.Quest.Id.Value is 245 or 3872 or 5253)
         {
-            ContentsTutorialPostSetup((AtkUnitBase*)args.Addon.Address);
+            ContentsTutorialPostSetup((AtkUnitBase*)args.Addon);
         }
     }
 
@@ -115,7 +115,7 @@ internal sealed class HelpUiController : IDisposable
         if (_questController.StartedQuest?.Quest.Id.Value == 245)
         {
             _logger.LogInformation("Closing MultipleHelpWindow");
-            AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
+            AtkUnitBase* addon = (AtkUnitBase*)args.Addon;
             addon->FireCallbackInt(-2);
             addon->FireCallbackInt(-1);
         }
@@ -125,7 +125,7 @@ internal sealed class HelpUiController : IDisposable
     {
         if (_questController.IsRunning || _questController.AutomationType != QuestController.EAutomationType.Manual)
         {
-            JobHudNoticePostSetup((AtkUnitBase*)args.Addon.Address);
+            JobHudNoticePostSetup((AtkUnitBase*)args.Addon);
         }
     }
 
@@ -139,7 +139,7 @@ internal sealed class HelpUiController : IDisposable
     {
         if (_questController.IsRunning || _questController.AutomationType != QuestController.EAutomationType.Manual)
         {
-            GuidePostSetup((AtkUnitBase*)args.Addon.Address);
+            GuidePostSetup((AtkUnitBase*)args.Addon);
         }
     }
 

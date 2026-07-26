@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
@@ -30,7 +30,7 @@ internal sealed class QuestTooltipComponent
 
     public void Draw(IQuestInfo questInfo)
     {
-        using ImRaii.TooltipDisposable tooltip = ImRaii.Tooltip();
+        using var tooltip = ImRaii.Tooltip();
         DrawInner(questInfo, true);
     }
 
@@ -158,7 +158,7 @@ internal sealed class QuestTooltipComponent
                 }
                 else
                 {
-                    using ImRaii.DisabledDisposable _ = ImRaii.Disabled();
+                    using var _ = ImRaii.Disabled();
                     _uiUtils.ChecklistItem($"Unknown Quest ({q.QuestId})", ImGuiColors.DalamudGrey,
                         FontAwesomeIcon.Question);
                 }

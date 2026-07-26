@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -66,14 +66,6 @@ internal sealed class PluginConfigComponent
                     new("https://puni.sh/api/repository/veyn"))
             },
             {
-                Configuration.ECombatModule.WrathCombo,
-                new("Wrath Combo",
-                    "WrathCombo",
-                    string.Empty,
-                    new("https://github.com/PunishXIV/WrathCombo"),
-                    new("https://puni.sh/api/plugins"))
-            },
-            {
                 Configuration.ECombatModule.RotationSolverReborn,
                 new("Rotation Solver Reborn",
                     "RotationSolver",
@@ -133,7 +125,7 @@ internal sealed class PluginConfigComponent
 
     public override void DrawTab()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Dependencies###Plugins");
+        using var tab = ImRaii.TabItem("Dependencies###Plugins");
         if (!tab)
         {
             return;
@@ -193,7 +185,6 @@ internal sealed class PluginConfigComponent
                 }
 
                 allRequiredInstalled &= DrawCombatPlugin(Configuration.ECombatModule.BossMod, checklistPadding);
-                allRequiredInstalled &= DrawCombatPlugin(Configuration.ECombatModule.WrathCombo, checklistPadding);
             }
             ImGui.Text("The following rotation/combat plugin(s) are provided for compatibility and testing purposes:");
             using (ImRaii.PushIndent())
@@ -342,8 +333,10 @@ internal sealed class PluginConfigComponent
         if (ThreadLoadImageHandler.TryGetTextureWrap(url, out IDalamudTextureWrap? logo))
         {
             return ImGui.ImageButton(
-                logo.Handle,
+                logo.ImGuiHandle,
                 new(size.Scale(), size.Scale()),
+                new(0, 0),
+                new(1, 1),
                 2,
                 isInstalled ? ImGuiColors.ParsedGreen : ImGuiColors.DalamudRed,
                 isActive ? Vector4.One : new(0.5f, 0.5f, 0.5f, 1f)

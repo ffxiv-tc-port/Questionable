@@ -3,12 +3,24 @@
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
-using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Numerics;
+using System.Runtime.InteropServices;
 namespace Questionable.Functions;
+
+// TC's client predates the game patch that added api13 - use the pre-api13 offsets,
+// same as vnavmesh's CameraEx (Movement/OverrideCamera.cs), since this is the same
+// underlying native struct FFXIVClientStructs.FFXIV.Client.Game.Camera doesn't expose here.
+[StructLayout(LayoutKind.Explicit, Size = 0x2B0)]
+internal unsafe struct CameraEx
+{
+    [FieldOffset(0x130)] public float DirH;
+    [FieldOffset(0x134)] public float DirV;
+    [FieldOffset(0x140)] public float InputDeltaH;
+    [FieldOffset(0x144)] public float InputDeltaV;
+}
 
 internal sealed unsafe class CameraFunctions : IDisposable
 {
@@ -82,7 +94,7 @@ internal sealed unsafe class CameraFunctions : IDisposable
         DesiredAltitude = Deg2Rad(-30);
     }
 
-    private void RMICameraDetour(Camera* self, int inputMode, float speedH, float speedV)
+    private void RMICameraDetour(CameraEx* self, int inputMode, float speedH, float speedV)
     {
         _rmiCameraHook.Original(self, inputMode, speedH, speedV);
         if (IgnoreUserInput || inputMode == 0) // let user override...
@@ -98,5 +110,5 @@ internal sealed unsafe class CameraFunctions : IDisposable
         }
     }
 
-    private delegate void RMICameraDelegate(Camera* self, int inputMode, float speedH, float speedV);
+    private delegate void RMICameraDelegate(CameraEx* self, int inputMode, float speedH, float speedV);
 }

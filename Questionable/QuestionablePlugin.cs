@@ -1,4 +1,6 @@
 ﻿using Dalamud.Extensions.MicrosoftLogging;
+using Dalamud.Game;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -29,8 +31,6 @@ using Questionable.Windows.JournalComponents;
 using Questionable.Windows.QuestComponents;
 using Questionable.Windows.Utils;
 using System;
-using WrathCombo.API;
-using WrathError = WrathCombo.API.WrathIPCWrapper.ErrorType;
 using Action = Questionable.Controller.Steps.Interactions.Action;
 
 namespace Questionable;
@@ -47,7 +47,6 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         IDataManager dataManager,
         ISigScanner sigScanner,
         IObjectTable objectTable,
-        IPlayerState playerState,
         IPluginLog pluginLog,
         ICondition condition,
         IChatGui chatGui,
@@ -62,7 +61,6 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         ArgumentNullException.ThrowIfNull(pluginInterface);
         ArgumentNullException.ThrowIfNull(chatGui);
         ECommonsMain.Init(pluginInterface, this, Module.DalamudReflector);
-        WrathIPCWrapper.Init(pluginInterface, WrathError.IPCNotReady | WrathError.Unexpected);
 
         try
         {
@@ -79,7 +77,6 @@ public sealed class QuestionablePlugin : IDalamudPlugin
             serviceCollection.AddSingleton(dataManager);
             serviceCollection.AddSingleton(sigScanner);
             serviceCollection.AddSingleton(objectTable);
-            serviceCollection.AddSingleton(playerState);
             serviceCollection.AddSingleton(pluginLog);
             serviceCollection.AddSingleton(condition);
             serviceCollection.AddSingleton(chatGui);
@@ -294,7 +291,6 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection.AddSingleton<ICombatModule, Mount147Module>();
         serviceCollection.AddSingleton<ICombatModule, ItemUseModule>();
         serviceCollection.AddSingleton<ICombatModule, BossModModule>();
-        serviceCollection.AddSingleton<ICombatModule, WrathComboModule>();
         serviceCollection.AddSingleton<ICombatModule, RotationSolverRebornModule>();
     }
 

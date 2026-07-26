@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
@@ -144,7 +144,7 @@ internal sealed class QuestSelectionWindow : LWindow
             ImGui.Checkbox("Only show quests currently offered", ref _onlyAvailableQuests);
         }
 
-        using ImRaii.TableDisposable table = ImRaii.Table("QuestSelection", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY);
+        using var table = ImRaii.Table("QuestSelection", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY);
         if (!table)
         {
             ImGui.Text("Not table");
@@ -222,7 +222,7 @@ internal sealed class QuestSelectionWindow : LWindow
 
             if (ImGui.TableNextColumn())
             {
-                using ImRaii.IdDisposable id = ImRaii.PushId(questId);
+                using var id = ImRaii.PushId(questId);
 
                 bool copy = ImGuiComponents.IconButton(FontAwesomeIcon.Copy);
                 if (ImGui.IsItemHovered())

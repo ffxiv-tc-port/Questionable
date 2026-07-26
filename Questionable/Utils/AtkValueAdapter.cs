@@ -10,7 +10,7 @@ internal static class AtkValueAdapter
 {
     public static unsafe string? ReadString(AtkValue value)
     {
-        if (value.Type == AtkValueType.Undefined)
+        if (value.Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Undefined)
         {
             return null;
         }

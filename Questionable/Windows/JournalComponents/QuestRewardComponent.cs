@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
@@ -28,7 +28,7 @@ internal sealed class QuestRewardComponent
 
     public void DrawItemRewards()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Item Rewards");
+        using var tab = ImRaii.TabItem("Item Rewards");
         if (!tab)
         {
             return;
@@ -80,7 +80,7 @@ internal sealed class QuestRewardComponent
                 FontAwesomeIcon icon = complete ? FontAwesomeIcon.Check : FontAwesomeIcon.Times;
                 if (_uiUtils.ChecklistItem(name, color, icon))
                 {
-                    using ImRaii.TooltipDisposable tooltip = ImRaii.Tooltip();
+                    using var tooltip = ImRaii.Tooltip();
                     ImGui.Text($"Obtained from: {questInfo.Name}");
                     using (ImRaii.PushIndent())
                     {

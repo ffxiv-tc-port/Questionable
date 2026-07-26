@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -64,7 +64,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
 
     public override void DrawTab()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Duties###Duties");
+        using var tab = ImRaii.TabItem("Duties###Duties");
         if (!tab)
         {
             return;
@@ -111,7 +111,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
 
     private void DrawConfigTable(bool runInstancedContentWithAutoDuty)
     {
-        using ImRaii.ChildDisposable child = ImRaii.Child("DutyConfiguration", new(650, 400), true);
+        using var child = ImRaii.Child("DutyConfiguration", new(650, 400), true);
         if (!child)
         {
             return;
@@ -139,7 +139,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
                     Save();
                 }
 
-                using ImRaii.TableDisposable table = ImRaii.Table($"Duties{expansion}", 2, ImGuiTableFlags.SizingFixedFit);
+                using var table = ImRaii.Table($"Duties{expansion}", 2, ImGuiTableFlags.SizingFixedFit);
                 if (table)
                 {
                     ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
@@ -173,7 +173,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
                                     if (ImGui.IsItemHovered() &&
                                         Configuration.Advanced.AdditionalStatusInformation)
                                     {
-                                        using ImRaii.TooltipDisposable tooltip = ImRaii.Tooltip();
+                                        using var tooltip = ImRaii.Tooltip();
                                         ImGui.TextUnformatted(name);
                                         ImGui.Separator();
                                         ImGui.BulletText($"TerritoryId: {territoryId}");
@@ -193,7 +193,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
 
                                 if (ImGui.TableNextColumn())
                                 {
-                                    using ImRaii.IdDisposable _ = ImRaii.PushId($"##Dungeon{cfcId}");
+                                    using var _ = ImRaii.PushId($"##Dungeon{cfcId}");
                                     ImGui.SetNextItemWidth(200);
                                     if (ImGui.Combo(string.Empty, ref value, labels, labels.Length))
                                     {

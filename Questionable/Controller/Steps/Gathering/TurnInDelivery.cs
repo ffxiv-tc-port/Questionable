@@ -88,8 +88,8 @@ internal static class TurnInDelivery
 
             AtkValue* pickGatheringItem = stackalloc AtkValue[]
             {
-                new() { Type = AtkValueType.Int, Int = 1 },
-                new() { Type = AtkValueType.Int, Int = 1 }
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 1 },
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 1 }
             };
             addon->FireCallback(2, pickGatheringItem);
             return ETaskResult.StillRunning;

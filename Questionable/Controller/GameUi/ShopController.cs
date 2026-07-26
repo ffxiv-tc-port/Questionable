@@ -1,5 +1,5 @@
 using Dalamud.Plugin.Services;
-using ECommons.UIHelpers.AddonMasterImplementations;
+using ECommons.Automation;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
 using Microsoft.Extensions.Logging;
@@ -8,9 +8,48 @@ using Questionable.Controller.GameUi.Shop.Model;
 using Questionable.Model.Questing;
 using Questionable.Utils;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 namespace Questionable.Controller.GameUi;
+
+// AddonMaster.Shop isn't available in the ECommons version pinned for this API level;
+// this mirrors ECommons' own implementation (UIHelpers/AddonMasterImplementations/Shop.cs)
+// directly against the raw AtkValues, which is stable across API levels since it just
+// reads fixed indices out of the "Shop" addon's own UI data.
+internal readonly struct ShopItemInfo
+{
+    public required uint ItemId { get; init; }
+    public required uint CostAmount { get; init; }
+    public required int Index { get; init; }
+
+    public unsafe void Select(AtkUnitBase* shop, int amount = 1)
+    {
+        Callback.Fire(shop, true, 0, Index, amount);
+    }
+}
+
+internal static class ShopAddonReader
+{
+    public static unsafe ShopItemInfo[] ReadShopItems(AtkUnitBase* addon)
+    {
+        List<ShopItemInfo> items = [];
+        uint numEntries = addon->AtkValues[2].UInt;
+        for(int i = 0; i < numEntries; ++i)
+        {
+            uint itemId = addon->AtkValues[441 + i].UInt;
+            if (itemId == 0)
+            {
+                continue;
+            }
+
+            uint costAmount = addon->AtkValues[75 + i].UInt;
+            items.Add(new ShopItemInfo { ItemId = itemId, CostAmount = costAmount, Index = i });
+        }
+
+        return [.. items];
+    }
+}
 
 internal sealed class ShopController : IDisposable, IShopWindow
 {
@@ -68,8 +107,7 @@ internal sealed class ShopController : IDisposable, IShopWindow
             return;
         }
 
-        AddonMaster.Shop addonMaster = new(addon);
-        AddonMaster.Shop.ShopItemInfo[] shopItems = addonMaster.ShopItems;
+        ShopItemInfo[] shopItems = ShopAddonReader.ReadShopItems(addon);
         if (shopItems.Length == 0)
         {
             _shop.ItemForSale = null;
@@ -95,9 +133,11 @@ internal sealed class ShopController : IDisposable, IShopWindow
             return;
         }
 
-        AddonMaster.Shop addonMaster = new(addonShop);
-        AddonMaster.Shop.ShopItemInfo? item = addonMaster.ShopItems.ElementAtOrDefault(_shop.ItemForSale.Position);
-        item?.Select(buyNow);
+        ShopItemInfo[] shopItems = ShopAddonReader.ReadShopItems(addonShop);
+        if (_shop.ItemForSale.Position >= 0 && _shop.ItemForSale.Position < shopItems.Length)
+        {
+            shopItems[_shop.ItemForSale.Position].Select(addonShop, buyNow);
+        }
     }
 
     public void SaveExternalPluginState()

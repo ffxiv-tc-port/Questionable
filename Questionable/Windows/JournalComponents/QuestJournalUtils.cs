@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
@@ -32,7 +32,7 @@ internal sealed class QuestJournalUtils
             ImGui.OpenPopup($"##QuestPopup{questInfo.QuestId}");
         }
 
-        using ImRaii.PopupDisposable popup = ImRaii.Popup($"##QuestPopup{questInfo.QuestId}");
+        using var popup = ImRaii.Popup($"##QuestPopup{questInfo.QuestId}");
         if (!popup)
         {
             return;
@@ -83,7 +83,7 @@ internal sealed class QuestJournalUtils
             ImGui.OpenPopup("##QuestFilters");
         }
 
-        using ImRaii.PopupDisposable popup = ImRaii.Popup("##QuestFilters");
+        using var popup = ImRaii.Popup("##QuestFilters");
         if (!popup)
         {
             return;
@@ -103,7 +103,7 @@ internal sealed class QuestJournalUtils
             ImGui.OpenPopup($"##QuestGroupPopup{note}");
         }
 
-        using ImRaii.PopupDisposable popup = ImRaii.Popup($"##QuestGroupPopup{note}");
+        using var popup = ImRaii.Popup($"##QuestGroupPopup{note}");
         if (!popup)
         {
             return;

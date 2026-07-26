@@ -1,4 +1,5 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Plugin.Services;
 using ECommons;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -313,7 +314,7 @@ internal sealed class CommandHandler : IDisposable
                     List<string> taxiStands = [];
                     ExcelSheet<ChocoboTaxiStand> taxiStandNames = _dataManager.GetExcelSheet<ChocoboTaxiStand>();
                     UIState* uiState = UIState.Instance();
-                    for(byte i = 0; i < uiState->UnlockedChocoboTaxiStands.Length * 8; ++i)
+                    for(byte i = 0; i < uiState->ChocoboTaxiStandsBitmask.Length * 8; ++i)
                     {
                         if (!(uiState->IsChocoboTaxiStandUnlocked(i)) && taxiStandNames.HasRow(i + 0x120000u))
                         {

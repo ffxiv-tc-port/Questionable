@@ -1,4 +1,5 @@
 ﻿using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -15,6 +16,7 @@ using Questionable.Controller.Utils;
 using Questionable.Model;
 using Questionable.Model.Questing;
 using Questionable.Utils;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -117,8 +119,8 @@ internal sealed unsafe class GameFunctions
     {
         foreach(IGameObject gameObject in _objectTable)
         {
-            if (gameObject.ObjectKind is ObjectKind.Pc or ObjectKind.Companion or ObjectKind.Mount
-                or ObjectKind.Retainer or ObjectKind.HousingEventObject)
+            if (gameObject.ObjectKind is ObjectKind.Player or ObjectKind.Companion or ObjectKind.MountType
+                or ObjectKind.Retainer or ObjectKind.Housing)
             {
                 continue;
             }
@@ -203,7 +205,7 @@ internal sealed unsafe class GameFunctions
         if (gameObject != null)
         {
             Vector3 position = gameObject.Position;
-            return ActionManager.Instance()->UseActionLocation(ActionType.EventItem, itemId, location: &position);
+            return ActionManager.Instance()->UseActionLocation(ActionType.KeyItem, itemId, location: &position);
         }
 
         return false;
@@ -211,7 +213,7 @@ internal sealed unsafe class GameFunctions
 
     public bool UseItemOnPosition(Vector3 position, uint itemId)
     {
-        return ActionManager.Instance()->UseActionLocation(ActionType.EventItem, itemId, location: &position);
+        return ActionManager.Instance()->UseActionLocation(ActionType.KeyItem, itemId, location: &position);
     }
 
     public bool UseAction(EAction action)
@@ -618,11 +620,16 @@ internal sealed unsafe class GameFunctions
         }
 
         List<uint> unlockedUnlockLinks = [];
-        foreach((int index, bool isUnlocked) in uiState->UnlockLinksBitArray)
+        Span<byte> unlockLinkBitmask = uiState->UnlockLinkBitmask;
+        for(int byteIndex = 0; byteIndex < unlockLinkBitmask.Length; ++byteIndex)
         {
-            if (isUnlocked)
+            byte b = unlockLinkBitmask[byteIndex];
+            for(int bit = 0; bit < 8; ++bit)
             {
-                unlockedUnlockLinks.Add((uint)index);
+                if ((b & (1 << bit)) != 0)
+                {
+                    unlockedUnlockLinks.Add((uint)(byteIndex * 8 + bit));
+                }
             }
         }
 

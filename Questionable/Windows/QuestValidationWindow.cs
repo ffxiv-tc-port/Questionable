@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -41,7 +41,7 @@ internal sealed class QuestValidationWindow : LWindow
 
     public override void DrawContent()
     {
-        using ImRaii.TableDisposable table = ImRaii.Table("QuestSelection", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY);
+        using var table = ImRaii.Table("QuestSelection", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.ScrollY);
         if (!table)
         {
             ImGui.Text("Not table");
@@ -113,12 +113,12 @@ internal sealed class QuestValidationWindow : LWindow
                 {
                     if (validationIssue.Severity == EIssueSeverity.Error)
                     {
-                        using ImRaii.ColorDisposable color = ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.DalamudRed);
+                        using var color = ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.DalamudRed);
                         ImGui.TextUnformatted(FontAwesomeIcon.ExclamationTriangle.ToIconString());
                     }
                     else
                     {
-                        using ImRaii.ColorDisposable color = ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.ParsedBlue);
+                        using var color = ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.ParsedBlue);
                         ImGui.TextUnformatted(FontAwesomeIcon.InfoCircle.ToIconString());
                     }
                 }

@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -140,7 +140,7 @@ internal sealed class QuickAccessButtonsComponent
         }
 
         int partsToRender = errorCount == 0 || infoCount == 0 ? 1 : 2;
-        using ImRaii.IdDisposable id = ImRaii.PushId("validationissues");
+        using var id = ImRaii.PushId("validationissues");
 
         FontAwesomeIcon icon1 = FontAwesomeIcon.ExclamationTriangle;
         FontAwesomeIcon icon2 = FontAwesomeIcon.InfoCircle;

@@ -1,5 +1,6 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
+using ECommons.ImGuiMethods;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
@@ -46,7 +47,7 @@ internal sealed class QuestJournalComponent
 
     public void DrawQuests()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Quests");
+        using var tab = ImRaii.TabItem("Quests");
         if (!tab)
         {
             return;
@@ -60,7 +61,7 @@ internal sealed class QuestJournalComponent
             ImGui.BulletText(
                 "Not all quests can be completed even if they're listed as available, e.g. starting city quest chains.");
             ImGui.BulletText("The text in the Supported column indicates the last time a quest path was reported to work perfectly.");
-            ImGui.TextColoredWrapped(ImGuiColors.DalamudYellow, "Quests can be added to Priority Quests, either individually or by group, with the right click menu.");
+            ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow, "Quests can be added to Priority Quests, either individually or by group, with the right click menu.");
 
             ImGui.Spacing();
             ImGui.Separator();
@@ -78,7 +79,7 @@ internal sealed class QuestJournalComponent
 
         if (_filteredSections.Count > 0)
         {
-            using ImRaii.TableDisposable table = ImRaii.Table("Quests", 3, ImGuiTableFlags.NoSavedSettings);
+            using var table = ImRaii.Table("Quests", 3, ImGuiTableFlags.NoSavedSettings);
             if (!table)
             {
                 return;

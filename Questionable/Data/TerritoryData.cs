@@ -164,7 +164,7 @@ internal sealed class TerritoryData
         }
         else
         {
-            return dataManager.GetExcelSheet<QuestBattleResident>().GetRow(questBattleId).SoloDuty.RowId;
+            return dataManager.GetExcelSheet<QuestBattleResident>().GetRow(questBattleId).Unknown0;
         }
     }
 

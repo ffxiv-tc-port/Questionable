@@ -760,7 +760,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     internal void AbandonQuest(QuestId questId)
     {
         _logger.LogInformation($"AbandonQuest: {questId}");
-        GameMain.ExecuteCommand(900, questId.Value);
+        _logger.LogWarning("Abandoning a quest via direct command is not available on this Dalamud API level; use the in-game journal to abandon it manually.");
     }
 
     internal void AbandonQuest(string questId)
