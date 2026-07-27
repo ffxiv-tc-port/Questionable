@@ -16,7 +16,7 @@ internal sealed class QuestInfo : IQuestInfo
 {
     public QuestInfo(ExcelQuest ogquest, uint newGamePlusChapter, byte startingCity, JournalGenreOverrides journalGenreOverrides)
     {
-        TempQuest quest = Svc.Data.GetExcelSheet<TempQuest>().GetRow(ogquest.RowId);
+        ExcelQuest quest = ogquest;
         QuestId = QQuestId.FromRowId(quest.RowId);
 
         string suffix = QuestId.Value switch
