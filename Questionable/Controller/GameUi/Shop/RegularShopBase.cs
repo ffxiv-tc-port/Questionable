@@ -50,7 +50,7 @@ public class RegularShopBase
             return;
         }
 
-        _parentWindow.UpdateShopStock((AtkUnitBase*)args.Addon);
+        _parentWindow.UpdateShopStock((AtkUnitBase*)args.Addon.Address);
         PostUpdateShopStock();
         if (ItemForSale != null)
         {
@@ -74,11 +74,11 @@ public class RegularShopBase
             return;
         }
 
-        _parentWindow.UpdateShopStock((AtkUnitBase*)args.Addon);
+        _parentWindow.UpdateShopStock((AtkUnitBase*)args.Addon.Address);
         PostUpdateShopStock();
         if (ItemForSale != null)
         {
-            AtkUnitBase* addon = (AtkUnitBase*)args.Addon;
+            AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
             short x = 0, y = 0;
             addon->GetPosition(&x, &y);
 

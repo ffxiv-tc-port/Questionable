@@ -1,4 +1,4 @@
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -334,13 +334,13 @@ internal sealed class PluginConfigComponent
         if (ThreadLoadImageHandler.TryGetTextureWrap(url, out IDalamudTextureWrap? logo))
         {
             return ImGui.ImageButton(
-                logo.ImGuiHandle,
-                new(size.Scale(), size.Scale()),
-                new(0, 0),
-                new(1, 1),
+                logo.Handle,
+                new Vector2(size.Scale(), size.Scale()),
+                new Vector2(0, 0),
+                new Vector2(1, 1),
                 2,
                 isInstalled ? ImGuiColors.ParsedGreen : ImGuiColors.DalamudRed,
-                isActive ? Vector4.One : new(0.5f, 0.5f, 0.5f, 1f)
+                isActive ? Vector4.One : new Vector4(0.5f, 0.5f, 0.5f, 1f)
             );
         }
         return false;

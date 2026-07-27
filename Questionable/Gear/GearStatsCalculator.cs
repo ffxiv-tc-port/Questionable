@@ -257,6 +257,8 @@ public unsafe readonly struct ExtendedBaseParam(ExcelPage page, uint offset, uin
 {
     private const int ParamCount = 23;
 
+    public ExcelPage ExcelPage => page;
+    public uint RowOffset => offset;
     public uint RowId => row;
     public BaseParam BaseParam => new(page, offset, row);
 

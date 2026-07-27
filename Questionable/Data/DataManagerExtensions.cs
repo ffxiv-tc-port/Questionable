@@ -97,6 +97,8 @@ public interface IQuestDialogueText
 [Sheet("QuestDialogueText")]
 public readonly struct QuestDialogueText(ExcelPage page, uint offset, uint row) : IQuestDialogueText, IExcelRow<QuestDialogueText>
 {
+    public ExcelPage ExcelPage => page;
+    public uint RowOffset => offset;
     public uint RowId => row;
 
     public ReadOnlySeString Key => page.ReadString(offset, offset);

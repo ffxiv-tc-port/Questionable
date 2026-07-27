@@ -23,12 +23,6 @@
         "resolved": "1.2.25",
         "contentHash": "xCXiw7BCxHJ8pF6wPepRUddlh2dlQlbr81gXA72hdk4FLHkKXas7EH/n+fk5UCA/YfMqG1Z6XaPiUjDbUNBUzg=="
       },
-      "ECommons": {
-        "type": "Direct",
-        "requested": "[3.0.0.8, )",
-        "resolved": "3.0.0.8",
-        "contentHash": "wvB3MTBTYQh8a7gAf5pLVS1wqyvihn4Q0RpHAgf/i+vMPVMMi/X2fegWE6JEY13syR4kl8WlGCkQmemxCZhe6Q=="
-      },
       "JetBrains.Annotations": {
         "type": "Direct",
         "requested": "[2025.2.4, )",
@@ -114,6 +108,9 @@
         "type": "Transitive",
         "resolved": "8.0.0",
         "contentHash": "bXJEZrW9ny8vjMF1JV253WeLhpEVzFo1lyaZu1vQ4ZxWUlVvknZ/+ftFgVheLubb4eZPSwwxBeqS1JkCOjxd8g=="
+      },
+      "ecommons": {
+        "type": "Project"
       },
       "gatheringpaths": {
         "type": "Project",
