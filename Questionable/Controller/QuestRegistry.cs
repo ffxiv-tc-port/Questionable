@@ -126,7 +126,7 @@ internal sealed class QuestRegistry
             }
             catch(Exception e)
             {
-                _logger.LogWarning("Not loading unknown quest {QuestId} from assembly: {Message}", questId, e.Message);
+                _logger.LogDebug("Not loading unknown quest {QuestId} from assembly: {Message}", questId, e.Message);
             }
         }
 
