@@ -348,8 +348,14 @@ internal sealed class PluginConfigComponent
 
     private IExposedPlugin? FindInstalledPlugin(PluginInfo pluginInfo)
     {
+        // Our TC fleet's fork of "Boss Mod (VBM)" is FFXIV-CombatReborn/BossModReborn, whose
+        // InternalName is "BossModReborn", not upstream's "BossMod" - the IPC integration
+        // (BossModIpc.cs) already talks to it fine via the generic "BossMod" IPC prefix both
+        // forks register under, but this installed-plugin lookup still needs to recognize it.
         return _pluginInterface.InstalledPlugins.FirstOrDefault(x =>
-            x.InternalName == pluginInfo.InternalName && x.IsLoaded);
+            (x.InternalName == pluginInfo.InternalName ||
+             (pluginInfo.InternalName == "BossMod" && x.InternalName == "BossModReborn")) &&
+            x.IsLoaded);
     }
 
     private sealed record PluginInfo
