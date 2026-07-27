@@ -46,6 +46,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
             .Select(x => x.Content.ValueNullable)
             .Where(x => x != null)
             .Select(x => x!.Value)
+            .Where(x => x.TerritoryType.ValueNullable != null)
             .Select(x => new
             {
                 Expansion = (EExpansionVersion)x.TerritoryType.Value.ExVersion.RowId,
