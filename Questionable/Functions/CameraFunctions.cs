@@ -3,24 +3,17 @@
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Numerics;
-using System.Runtime.InteropServices;
 namespace Questionable.Functions;
 
-// TC's client predates the game patch that added api13 - use the pre-api13 offsets,
-// same as vnavmesh's CameraEx (Movement/OverrideCamera.cs), since this is the same
-// underlying native struct FFXIVClientStructs.FFXIV.Client.Game.Camera doesn't expose here.
-[StructLayout(LayoutKind.Explicit, Size = 0x2B0)]
-internal unsafe struct CameraEx
-{
-    [FieldOffset(0x130)] public float DirH;
-    [FieldOffset(0x134)] public float DirV;
-    [FieldOffset(0x140)] public float InputDeltaH;
-    [FieldOffset(0x144)] public float InputDeltaV;
-}
+// NOTE: the old hand-rolled `CameraEx` struct is gone on purpose (same fix as vnavmesh/Lifestream on
+// TC 7.20). Its 0x130-based FieldOffsets were the TC 7.15 layout — TC 7.20 shifted the native struct
+// +0x10, so FFXIVClientStructs.FFXIV.Client.Game.Camera (verified against the API13 pin) now exposes
+// exactly the fields we need; use it directly and let the pin track layout changes for us.
 
 internal sealed unsafe class CameraFunctions : IDisposable
 {
@@ -28,11 +21,12 @@ internal sealed unsafe class CameraFunctions : IDisposable
     private readonly IObjectTable _objectTable;
 
     private readonly bool IgnoreUserInput = true; // if true - override even if user tries to change camera orientation, otherwise override only if user does nothing
-    // Global's function-prologue signature doesn't match TC's compiled shape of this function at all.
-    // This call-site signature instead is sourced from vnavmesh's own CameraEx hook (Movement/OverrideCamera.cs),
-    // confirmed to match exactly once in TC's binary. Kept fallible, same as vnavmesh, so a future signature
+    // The TC 7.15-era call-site signature (E8 ?? ?? ?? ?? EB 05 E8 ?? ?? ?? ?? 44 0F 28 4C 24 ??)
+    // scans zero hits on TC 7.20 (the call site's trailing movaps changed register allocation), which
+    // silently disabled camera auto-facing. This is the function-prologue signature vnavmesh verified
+    // on TC 7.20 (matches exactly once). Kept fallible, same as vnavmesh, so a future signature
     // drift only disables camera auto-facing instead of crashing the whole plugin.
-    [Signature("E8 ?? ?? ?? ?? EB 05 E8 ?? ?? ?? ?? 44 0F 28 4C 24 ??", Fallibility = Fallibility.Fallible)]
+    [Signature("48 8B C4 53 48 81 EC ?? ?? ?? ?? 44 0F 29 50 ??", Fallibility = Fallibility.Fallible)]
     private Hook<RMICameraDelegate>? _rmiCameraHook;
     private float DesiredAltitude;
     private float DesiredAzimuth;
@@ -107,7 +101,7 @@ internal sealed unsafe class CameraFunctions : IDisposable
         DesiredAltitude = Deg2Rad(-30);
     }
 
-    private void RMICameraDetour(CameraEx* self, int inputMode, float speedH, float speedV)
+    private void RMICameraDetour(Camera* self, int inputMode, float speedH, float speedV)
     {
         _rmiCameraHook!.Original(self, inputMode, speedH, speedV);
         if (IgnoreUserInput || inputMode == 0) // let user override...
@@ -123,5 +117,5 @@ internal sealed unsafe class CameraFunctions : IDisposable
         }
     }
 
-    private delegate void RMICameraDelegate(CameraEx* self, int inputMode, float speedH, float speedV);
+    private delegate void RMICameraDelegate(Camera* self, int inputMode, float speedH, float speedV);
 }
