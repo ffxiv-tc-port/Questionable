@@ -191,7 +191,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void SelectStringPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonSelectString* addonSelectString = (AddonSelectString*)args.Addon;
+        AddonSelectString* addonSelectString = (AddonSelectString*)args.Addon.Address;
         SelectStringPostSetup(addonSelectString, false);
     }
 
@@ -227,7 +227,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void CutsceneSelectStringPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonCutSceneSelectString* addonCutSceneSelectString = (AddonCutSceneSelectString*)args.Addon;
+        AddonCutSceneSelectString* addonCutSceneSelectString = (AddonCutSceneSelectString*)args.Addon.Address;
         CutsceneSelectStringPostSetup(addonCutSceneSelectString, false);
     }
 
@@ -260,7 +260,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void SelectIconStringPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonSelectIconString* addonSelectIconString = (AddonSelectIconString*)args.Addon;
+        AddonSelectIconString* addonSelectIconString = (AddonSelectIconString*)args.Addon.Address;
         SelectIconStringPostSetup(addonSelectIconString, false);
     }
 
@@ -642,7 +642,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void SelectYesnoPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonSelectYesno* addonSelectYesno = (AddonSelectYesno*)args.Addon;
+        AddonSelectYesno* addonSelectYesno = (AddonSelectYesno*)args.Addon.Address;
         SelectYesnoPostSetup(addonSelectYesno, false);
     }
 
@@ -871,7 +871,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void DifficultySelectYesNoPostSetup(AddonEvent type, AddonArgs args)
     {
-        AtkUnitBase* addonDifficultySelectYesNo = (AtkUnitBase*)args.Addon;
+        AtkUnitBase* addonDifficultySelectYesNo = (AtkUnitBase*)args.Addon.Address;
         DifficultySelectYesNoPostSetup(addonDifficultySelectYesNo, false);
     }
 
@@ -1051,7 +1051,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void PointMenuPostSetup(AddonEvent type, AddonArgs args)
     {
-        AtkUnitBase* addonPointMenu = (AtkUnitBase*)args.Addon;
+        AtkUnitBase* addonPointMenu = (AtkUnitBase*)args.Addon.Address;
         PointMenuPostSetup(addonPointMenu);
     }
 
@@ -1115,7 +1115,7 @@ internal sealed class InteractionUiController : IDisposable
         }
 
         _logger.LogInformation("Confirming selected housing ward");
-        AtkUnitBase* addon = (AtkUnitBase*)args.Addon;
+        AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
         addon->FireCallbackInt(0);
     }
 

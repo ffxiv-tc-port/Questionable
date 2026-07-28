@@ -1,4 +1,4 @@
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 using System.Diagnostics.CodeAnalysis;
 namespace Questionable.Windows.Common;

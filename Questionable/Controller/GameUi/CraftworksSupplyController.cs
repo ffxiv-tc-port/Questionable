@@ -46,7 +46,7 @@ internal sealed class CraftworksSupplyController : IDisposable
             return;
         }
 
-        AtkUnitBase* addon = (AtkUnitBase*)args.Addon;
+        AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
         InteractWithBankaCraftworksSupply(addon);
     }
 
@@ -97,7 +97,7 @@ internal sealed class CraftworksSupplyController : IDisposable
             return;
         }
 
-        AddonContextIconMenu* addonContextIconMenu = (AddonContextIconMenu*)args.Addon;
+        AddonContextIconMenu* addonContextIconMenu = (AddonContextIconMenu*)args.Addon.Address;
         if (!addonContextIconMenu->IsVisible)
         {
             return;
