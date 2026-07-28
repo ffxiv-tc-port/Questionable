@@ -254,7 +254,7 @@ internal sealed class QuestJournalComponent
 
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + spacing);
         string defaultReason;
-        string reason = defaultReason = "<no reason specified>";
+        string reason = defaultReason = "<no reason specified>".Loc();
         if (quest != null)
         {
             reason = (quest.Root.Comment ?? defaultReason).Split('\n', 2)[0];
