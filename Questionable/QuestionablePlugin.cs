@@ -115,8 +115,24 @@ public sealed class QuestionablePlugin : IDalamudPlugin
 
     public void Dispose()
     {
-        _serviceProvider?.Dispose();
-        ECommonsMain.Dispose();
+        // ServiceProvider.Dispose() does not swallow exceptions: one service whose
+        // Dispose() throws aborts disposal of everything after it AND, without this
+        // try/finally, would skip ECommonsMain.Dispose() entirely - leaving
+        // ECommons' hooks installed for the rest of the game session.
+        //
+        // The concrete case that motivated this (2026-07-29): TextAdvanceIpc.Dispose()
+        // invokes TextAdvance over IPC, which throws IpcNotReadyError whenever
+        // TextAdvance happens to unload first. That call site is now guarded too;
+        // this is the belt-and-braces half, so any FUTURE service that throws on
+        // dispose can't take ECommons down with it.
+        try
+        {
+            _serviceProvider?.Dispose();
+        }
+        finally
+        {
+            ECommonsMain.Dispose();
+        }
     }
 
     private static void AddBasicFunctionsAndData(ServiceCollection serviceCollection)
