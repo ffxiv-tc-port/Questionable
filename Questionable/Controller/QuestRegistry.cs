@@ -11,6 +11,7 @@ using Questionable.Model.Questing;
 using Questionable.QuestPaths;
 using Questionable.Validation;
 using Questionable.Validation.Validators;
+using static Questionable.Utils.CacheUtils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -59,7 +60,8 @@ internal sealed class QuestRegistry
     }
 
     public IEnumerable<Quest> AllQuests => _quests.Values;
-    public int Count => _quests.Count(x => !x.Value.Root.Disabled);
+    private CachedValue<int> _count = new(ttlSeconds: 1);
+    public int Count => _count.Get(() => _quests.Count(x => !x.Value.Root.Disabled));
     public int ValidationIssueCount => _questValidator.IssueCount;
     public int ValidationErrorCount => _questValidator.ErrorCount;
 

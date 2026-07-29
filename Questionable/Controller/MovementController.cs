@@ -6,6 +6,7 @@ using Dalamud.Plugin.Ipc.Exceptions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller.NavigationOverrides;
 using Questionable.Data;
@@ -36,6 +37,7 @@ internal sealed class MovementController
     IObjectTable objectTable,
     AetheryteData aetheryteData,
     ICommandManager commandManager,
+    IServiceProvider serviceProvider,
     ILogger<MovementController> logger) : IDisposable
 {
     public ICommandManager CommandManager { get; } = commandManager;
@@ -148,6 +150,9 @@ internal sealed class MovementController
                 throw new PathfindingFailedException();
             }
         }
+
+        if (!serviceProvider.GetRequiredService<QuestController>().IsQuestingActive)
+            return;
 
         if (IsPathRunning && Destination != null)
         {

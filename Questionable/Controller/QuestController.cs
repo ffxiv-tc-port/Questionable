@@ -227,6 +227,15 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             }
         }
     }
+
+    public bool IsQuestingActive
+    {
+        get
+        {
+            return AutomationType == EAutomationType.Manual && !IsRunning && !IsQuestWindowOpen;
+        }
+    }
+
     public event AutomationTypeChangedEventHandler? AutomationTypeChanged;
 
     public void Reload()
@@ -284,7 +293,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             }
         }
 
-        if (AutomationType == EAutomationType.Manual && !IsRunning && !IsQuestWindowOpen)
+        if (IsQuestingActive)
         {
             return;
         }
@@ -1183,7 +1192,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             return false;
         }
 
-        ElementId? priorityQuestId = _questFunctions.GetNextPriorityQuestsThatCanBeAccepted()
+        ElementId? priorityQuestId = _questFunctions.NextPriorityQuestsThatCanBeAccepted
             .Where(x => x.IsAvailable)
             .Select(x => x.QuestId)
             .FirstOrDefault();
