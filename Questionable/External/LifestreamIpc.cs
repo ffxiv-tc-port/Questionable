@@ -1,5 +1,6 @@
 ﻿using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
+using Dalamud.Plugin.Ipc.Exceptions;
 using Microsoft.Extensions.Logging;
 using Questionable.Model.Common;
 using System;
@@ -18,8 +19,33 @@ internal sealed class LifestreamIpc(IDalamudPluginInterface pluginInterface, ILo
     private readonly ICallGateSubscriber<bool> _isBusy =
         pluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy");
     private readonly ILogger<LifestreamIpc> _logger = logger;
+    private bool _loggedIsBusyError;
 
-    public bool IsBusy => _isBusy.InvokeFunc();
+    /// <summary>
+    /// Whether Lifestream is currently teleporting. Reports "not busy" when Lifestream cannot be
+    /// reached: this is read every frame by <c>WaitLifestream</c>, and answering "busy" would leave
+    /// that task StillRunning forever, hanging the quest queue on a plugin that is not responding.
+    /// </summary>
+    public bool IsBusy
+    {
+        get
+        {
+            try
+            {
+                return _isBusy.InvokeFunc();
+            }
+            catch(IpcError e)
+            {
+                if (!_loggedIsBusyError)
+                {
+                    _loggedIsBusyError = true;
+                    _logger.LogWarning(e, "Could not query lifestream busy state, probably not installed; assuming not busy");
+                }
+
+                return false;
+            }
+        }
+    }
 
     public bool Teleport(string destination)
     {

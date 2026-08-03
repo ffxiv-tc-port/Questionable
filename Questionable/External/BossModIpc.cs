@@ -2,6 +2,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Ipc.Exceptions;
 using Dalamud.Plugin.Services;
+using Microsoft.Extensions.Logging;
 using Questionable.Data;
 using Questionable.Model.Questing;
 using System;
@@ -15,7 +16,8 @@ internal sealed class BossModIpc
     IDalamudPluginInterface pluginInterface,
     Configuration configuration,
     ICommandManager commandManager,
-    TerritoryData territoryData)
+    TerritoryData territoryData,
+    ILogger<BossModIpc> logger)
 {
     public enum EPreset
     {
@@ -40,6 +42,21 @@ internal sealed class BossModIpc
     private readonly ICallGateSubscriber<string, string?> _getPreset = pluginInterface.GetIpcSubscriber<string, string?>($"{PluginName}.Presets.Get");
     private readonly ICallGateSubscriber<string, bool> _setPreset = pluginInterface.GetIpcSubscriber<string, bool>($"{PluginName}.Presets.SetActive");
     private readonly TerritoryData _territoryData = territoryData;
+    private readonly ILogger<BossModIpc> _logger = logger;
+
+    /// <summary>
+    /// Operations whose IPC failure has already been logged; keeps per-frame or repeated
+    /// task paths from flooding the log with the same message.
+    /// </summary>
+    private readonly HashSet<string> _loggedIpcErrors = [];
+
+    private void LogIpcFailure(IpcError e, string operation)
+    {
+        if (_loggedIpcErrors.Add(operation))
+        {
+            _logger.LogWarning(e, "BossMod IPC call {Operation} failed, is BossMod installed and up to date?", operation);
+        }
+    }
 
     public bool IsSupported()
     {
@@ -53,36 +70,58 @@ internal sealed class BossModIpc
         }
     }
 
-    public void SetPreset(EPreset preset)
+    /// <returns><c>true</c> if the preset was applied; <c>false</c> if BossMod could not be reached.</returns>
+    public bool SetPreset(EPreset preset)
     {
         PresetDefinition definition = PresetDefinitions[preset];
-        if (_getPreset.InvokeFunc(definition.Name) == null)
+        try
         {
-            _createPreset.InvokeFunc(definition.Content, true);
-        }
+            if (_getPreset.InvokeFunc(definition.Name) == null)
+            {
+                _createPreset.InvokeFunc(definition.Content, true);
+            }
 
-        _setPreset.InvokeFunc(definition.Name);
+            _setPreset.InvokeFunc(definition.Name);
+            return true;
+        }
+        catch(IpcError e)
+        {
+            LogIpcFailure(e, $"SetPreset({definition.Name})");
+            return false;
+        }
     }
 
-    public void ClearPreset()
+    /// <returns><c>true</c> if the preset was cleared; <c>false</c> if BossMod could not be reached.</returns>
+    public bool ClearPreset()
     {
-        _clearPreset.InvokeFunc();
+        try
+        {
+            _clearPreset.InvokeFunc();
+            return true;
+        }
+        catch(IpcError e)
+        {
+            LogIpcFailure(e, "ClearPreset");
+            return false;
+        }
     }
 
     // TODO this should use your actual rotation plugin, not always vbm
-    public void EnableAi(bool passive)
+    /// <returns><c>true</c> if the AI was enabled; <c>false</c> if BossMod could not be reached.</returns>
+    public bool EnableAi(bool passive)
     {
         //_commandManager.ProcessCommand("/vbmai on");
         _commandManager.ProcessCommand("/vbm cfg ZoneModuleConfig EnableQuestBattles true");
         _commandManager.ProcessCommand("/vbm cfg Autorotation ClearPresetOnCombatEnd false");
-        SetPreset(passive ? EPreset.Overworld : EPreset.QuestBattle);
+        return SetPreset(passive ? EPreset.Overworld : EPreset.QuestBattle);
     }
 
-    public void DisableAi()
+    /// <returns><c>true</c> if the AI was disabled; <c>false</c> if BossMod could not be reached.</returns>
+    public bool DisableAi()
     {
         _commandManager.ProcessCommand("/vbmai off");
         _commandManager.ProcessCommand("/vbm cfg ZoneModuleConfig EnableQuestBattles false");
-        ClearPreset();
+        return ClearPreset();
     }
 
     public bool IsConfiguredToRunSoloInstance(ElementId questId, SinglePlayerDutyOptions? dutyOptions)

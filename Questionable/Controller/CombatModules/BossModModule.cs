@@ -1,5 +1,4 @@
 ﻿using Dalamud.Game.ClientState.Objects.Types;
-using Dalamud.Plugin.Ipc.Exceptions;
 using Microsoft.Extensions.Logging;
 using Questionable.External;
 using System;
@@ -27,30 +26,28 @@ internal sealed class BossModModule
 
     public bool Start(CombatController.CombatData combatData)
     {
-        try
+        // BossModIpc logs the underlying IPC error itself and reports failure via the return
+        // value, so that a missing/incompatible BossMod degrades gracefully instead of
+        // aborting the whole task queue. Returning false here keeps the honest signal that
+        // combat is *not* being handled.
+        if (_bossModIpc.SetPreset(BossModIpc.EPreset.Overworld))
         {
-            _bossModIpc.SetPreset(BossModIpc.EPreset.Overworld);
             return true;
         }
-        catch(IpcError e)
-        {
-            _logger.LogWarning(e, "Could not start combat");
-            return false;
-        }
+
+        _logger.LogWarning("Could not start combat");
+        return false;
     }
 
     public bool Stop()
     {
-        try
+        if (_bossModIpc.ClearPreset())
         {
-            _bossModIpc.ClearPreset();
             return true;
         }
-        catch(IpcError e)
-        {
-            _logger.LogWarning(e, "Could not turn off combat");
-            return false;
-        }
+
+        _logger.LogWarning("Could not turn off combat");
+        return false;
     }
 
     public void Update(IGameObject gameObject)

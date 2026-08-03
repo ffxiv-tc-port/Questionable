@@ -10,6 +10,7 @@ internal sealed class StylistIpc
     private readonly ILogger<AutomatonIpc> _logger;
     private readonly ICallGateSubscriber<bool?, bool?, object?> _updateGearset; //bool? moveItemsFromInventory, bool? shouldEquip
     private bool _loggedIpcError;
+    private bool _loggedIsBusyError;
 
     public StylistIpc(IDalamudPluginInterface pluginInterface, ILogger<AutomatonIpc> logger)
     {
@@ -18,8 +19,32 @@ internal sealed class StylistIpc
         _isBusy = pluginInterface.GetIpcSubscriber<bool>("Stylist.IsBusy");
     }
 
-    public bool IsBusy =>
-        _isBusy.InvokeFunc();
+    /// <summary>
+    /// Whether Stylist is currently updating the gearset. Reports "not busy" when Stylist cannot be
+    /// reached: this is read every frame by <c>EquipRecommended</c>, and answering "busy" would leave
+    /// that task StillRunning forever. Falling through to <see cref="UpdateGearset"/> instead hits
+    /// the already-guarded path, which logs and moves on.
+    /// </summary>
+    public bool IsBusy
+    {
+        get
+        {
+            try
+            {
+                return _isBusy.InvokeFunc();
+            }
+            catch(IpcError e)
+            {
+                if (!_loggedIsBusyError)
+                {
+                    _loggedIsBusyError = true;
+                    _logger.LogWarning(e, "Could not query stylist busy state, probably not installed; assuming not busy");
+                }
+
+                return false;
+            }
+        }
+    }
 
     public void UpdateGearset()
     {
