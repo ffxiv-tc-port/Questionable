@@ -62,6 +62,9 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         ArgumentNullException.ThrowIfNull(pluginInterface);
         ArgumentNullException.ThrowIfNull(chatGui);
         ECommonsMain.Init(pluginInterface, this, Module.DalamudReflector);
+        // 讓「呼叫了對方沒有的 IPC 方法」不再完全靜默。
+        // 訂閱越早越好：事件只在 IPC **呼叫**當下才被查閱，在這裡訂閱就涵蓋往後所有呼叫。
+        EzIpcFailureLog.Enable();
         Localization.Init(pluginInterface.UiLanguage is "tw" or "zh" or "zh-Hant" or "zh-Hans"
             ? "ChineseTraditional"
             : "English");
@@ -131,6 +134,7 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         }
         finally
         {
+            EzIpcFailureLog.Disable();
             ECommonsMain.Dispose();
         }
     }
