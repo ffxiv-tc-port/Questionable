@@ -101,19 +101,59 @@ internal sealed unsafe class CameraFunctions : IDisposable
         DesiredAltitude = Deg2Rad(-30);
     }
 
+    // fail-closed: a detour is a managed function the *native* code calls directly, so a managed
+    // exception escaping it unwinds through native frames that have no handler for it. Everything we
+    // add on top of Original() therefore runs inside a try, and the degraded behaviour is "don't
+    // override" - Original has already run, so the game's own camera handling passes through intact.
+    // NOTE: this does NOT protect against AccessViolationException (corrupted-state, uncatchable in
+    // .NET Core). What it catches is managed exceptions - most importantly the
+    // InvalidOperationException that ClientStructs' [StaticAddress]/[MemberFunction] members throw
+    // when their signature stops resolving after a game patch (Framework.Instance() below is one).
+    private long _detourErrors;
+    private DateTime _lastDetourErrorLog = DateTime.MinValue;
+
+    private void OnDetourError(Exception ex)
+    {
+        ++_detourErrors;
+        // this runs per frame - never log unthrottled. Information (not Debug) because reporting
+        // users run at LogLevel 2.
+        DateTime now = DateTime.UtcNow;
+        if (now - _lastDetourErrorLog < TimeSpan.FromSeconds(30))
+        {
+            return;
+        }
+
+        _lastDetourErrorLog = now;
+        _logger.LogInformation(ex,
+            "Camera auto-facing threw, leaving the game's own camera input alone (total {Count})",
+            _detourErrors);
+    }
+
     private void RMICameraDetour(Camera* self, int inputMode, float speedH, float speedV)
     {
         _rmiCameraHook!.Original(self, inputMode, speedH, speedV);
-        if (IgnoreUserInput || inputMode == 0) // let user override...
+        try
         {
-            float dt = Framework.Instance()->FrameDeltaTime;
-            float deltaH = Normalized(DesiredAzimuth - self->DirH);
-            float deltaV = Normalized(DesiredAltitude - self->DirV);
-            float maxH = Deg2Rad(180);
-            float maxV = Deg2Rad(180);
-            self->InputDeltaH = Math.Clamp(deltaH, -maxH, maxH);
-            self->InputDeltaV = Math.Clamp(deltaV, -maxV, maxV);
-            Enabled = false;
+            if (self == null)
+            {
+                return;
+            }
+
+            if (IgnoreUserInput || inputMode == 0) // let user override...
+            {
+                float dt = Framework.Instance()->FrameDeltaTime;
+                float deltaH = Normalized(DesiredAzimuth - self->DirH);
+                float deltaV = Normalized(DesiredAltitude - self->DirV);
+                float maxH = Deg2Rad(180);
+                float maxV = Deg2Rad(180);
+                self->InputDeltaH = Math.Clamp(deltaH, -maxH, maxH);
+                self->InputDeltaV = Math.Clamp(deltaV, -maxV, maxV);
+                Enabled = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            OnDetourError(ex);
         }
     }
 
