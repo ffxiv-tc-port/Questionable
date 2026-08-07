@@ -85,7 +85,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         _pluginInterface.GetIpcSubscriber<object>("Questionable.ReloadData")
             .Subscribe(Reload);
 
-        PctService.Initialize(pluginInterface);
+        PictoService.Initialize(pluginInterface);
         LoadGatheringLocationsFromDirectory();
 
         _pluginInterface.UiBuilder.Draw += _windowSystem.Draw;
@@ -354,7 +354,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         if (!ExcelJobHelper.IsDol(_currentClassJob))
             return;
 
-        using var drawList = PctService.Draw();
+        using var drawList = PictoService.Draw();
         if (drawList == null)
             return;
 
@@ -453,7 +453,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         _pluginInterface.UiBuilder.Draw -= Draw;
         _pluginInterface.UiBuilder.Draw -= _windowSystem.Draw;
 
-        PctService.Dispose();
+        PictoService.Dispose();
 
         _pluginInterface.GetIpcSubscriber<object>("Questionable.ReloadData")
             .Unsubscribe(Reload);

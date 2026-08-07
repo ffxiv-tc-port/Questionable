@@ -1,4 +1,4 @@
-<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+<Project Sdk="Dalamud.NET.Sdk/13.0.0">
     <PropertyGroup>
         <Version>0.10</Version>
         <OutputPath>dist</OutputPath>
@@ -9,17 +9,23 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Questionable.Model\Questionable.Model.csproj" />
+      <!-- 🔴 必須用子模組的 ECommons（與 Questionable 主專案同源），不可用 NuGet 套件：
+           NuGet 上的 ECommons 3.2.0.16 是 API15 世代（net10.0），與本艦隊釘的 API13
+           （net9.0）不相容，會編得過但載不起來。判準＝obj/project.assets.json 裡
+           ECommons 的 type 要是 project 而不是 package。 -->
+      <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="ECommons" Version="3.2.0.16" />
-      <PackageReference Include="Pictomancy" Version="1.0.3" />
+      <!-- ⚠️ Pictomancy 1.0.x（含 0.0.2 以後）只發 net10.0-windows7.0，restore 會 NU1202。
+           0.0.1 是最後一個支援 net9.0-windows7.0 的版本，與 AutoDuty 用的是同一版。 -->
+      <PackageReference Include="Pictomancy" Version="0.0.1" />
       <PackageReference Include="System.Net.Http" Version="4.3.4" />
       <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Update="DalamudPackager" Version="15.0.0" />
+      <PackageReference Update="DalamudPackager" Version="13.0.0" />
     </ItemGroup>
 
     <ItemGroup>
