@@ -42,9 +42,15 @@ internal sealed unsafe class InterruptHandler : IDisposable
     private void HandleProcessActionEffect(uint sourceId, Character* sourceCharacter, Vector3* pos,
         EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail)
     {
+        // fail-closed：自訂邏輯全在 try 內、Original 在 finally 裡 —— 不管我們怎麼失敗，
+        // 遊戲原本的處理一定照跑一次。這個形狀本身已經是對的，不要改成「try 後面接一行 Original」。
+        // 🔴 但 try 攔不到 AccessViolationException（在 .NET Core 是 corrupted-state exception），
+        //    而 effectHeader / effectArray / effectTail 三個都是遊戲交進來的裸指標。
+        //    下面的判空才是對那條路徑的唯一防護；判空不成立時就整段跳過，讓 finally 的 Original 照跑。
         try
         {
-            if (!_territoryData.IsDutyInstance(_clientState.TerritoryType))
+            if (effectHeader != null && effectArray != null && effectTail != null &&
+                !_territoryData.IsDutyInstance(_clientState.TerritoryType))
             {
                 for(int i = 0; i < effectHeader->TargetCount; i++)
                 {
