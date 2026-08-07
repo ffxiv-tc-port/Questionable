@@ -390,10 +390,17 @@ internal sealed class PathDownloader : IDisposable
         try
         {
             _cts.Cancel();
+
+            // ⚠️ 一定要等背景工作真的停下來再 Dispose HttpClient：不等的話，
+            //    工作可能正在 GetAsync 中途，拿到的是 ObjectDisposedException，
+            //    然後在 catch 裡去用同樣已經被拆掉的 IPluginLog —— 那個例外沒有人
+            //    觀察得到，會變成完全靜默的 unload 期怪象。
+            //    工作全程 ConfigureAwait(false)、不捕捉同步內容，Wait 不會死結。
+            _task?.Wait(TimeSpan.FromSeconds(3));
         }
         catch (Exception e)
         {
-            _pluginLog.Information($"[GatheringPaths] 取消下載工作時發生例外: {e}");
+            _pluginLog.Information($"[GatheringPaths] 停止下載工作時發生例外: {e}");
         }
 
         _cts.Dispose();
