@@ -16,6 +16,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using GatheringPathRenderer.Updater;
 using GatheringPathRenderer.Windows;
 using ECommons.ExcelServices;
 using Pictomancy;
@@ -36,6 +37,7 @@ public sealed class RendererPlugin : IDalamudPlugin
 
     private readonly EditorCommands _editorCommands;
     private readonly EditorWindow _editorWindow;
+    private readonly PathDownloader _pathDownloader;
 
     private readonly List<GatheringLocationContext> _gatheringLocations = [];
     private readonly Dictionary<uint, List<Vector3>> _gbrLocationData;
@@ -67,7 +69,12 @@ public sealed class RendererPlugin : IDalamudPlugin
 
         _editorCommands = new EditorCommands(this, dataManager, commandManager, targetManager, clientState,
             objectTable, chatGui, pluginLog, configuration);
-        var configWindow = new ConfigWindow(pluginInterface, configuration);
+
+        // 🔴 Release 版的 PathsDirectory 只是個空目錄，路徑 json 不隨外掛出貨 ——
+        //    使用者要靠設定視窗那顆按鈕自己下載，否則疊加層永遠是空的（而且不報錯）。
+        _pathDownloader = new PathDownloader(this, pluginLog, framework);
+
+        var configWindow = new ConfigWindow(pluginInterface, configuration, _pathDownloader, this);
         _editorWindow = new EditorWindow(this, _editorCommands, dataManager, commandManager, targetManager, clientState, objectTable,
                 configWindow)
         { IsOpen = true };
@@ -468,6 +475,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         _pluginInterface.GetIpcSubscriber<object>("Questionable.ReloadData")
             .Unsubscribe(Reload);
 
+        _pathDownloader.Dispose();
         _editorCommands.Dispose();
     }
 
