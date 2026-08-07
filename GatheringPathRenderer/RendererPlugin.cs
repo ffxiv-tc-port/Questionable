@@ -54,7 +54,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         _objectTable = objectTable;
         //_playerState = playerState;
         _pluginLog = pluginLog;
-        _gbrLocationData = LoadGBRPosData(_pluginInterface.AssemblyLocation.DirectoryName!);
+        _gbrLocationData = LoadGBRPosData();
         pluginLog.Info($"Loaded {_gbrLocationData.Count} entries from GBR data");
         ECommonsMain.Init(pluginInterface, this);
 
@@ -261,10 +261,20 @@ public sealed class RendererPlugin : IDalamudPlugin
             root));
     }
 
-    public static Dictionary<uint, List<Vector3>> LoadGBRPosData(string directoryName)
+    public static Dictionary<uint, List<Vector3>> LoadGBRPosData()
     {
-        var path = Path.Combine(directoryName, "world_locations.json");
-        using FileStream stream = new(path, FileMode.Open, FileAccess.Read);
+        // 🔴 不要改回 CopyToOutputDirectory 讀檔案：Dalamud.NET.Sdk 把
+        // EnableDefaultNoneItems 設成 false（沙盒式 SDK 的預設，避免亂七八糟的檔案被
+        // 順手複製進外掛輸出），所以 <None Update="..."> 這個寫法在沒有對應的
+        // <None Include> 時是對一個不存在的 item 做 no-op —— 檔案完全不會出現在
+        // dist/ 或已封裝的 zip 裡,建構子在 Release 一啟動就 FileNotFoundException,
+        // 外掛 100% 讀不起來(2026-08-07 實測:直接檢查封裝出的 zip 內容驗證)。
+        // 上游已經在較新版本改成內嵌資源(EmbeddedResource + LogicalName)修掉這個問題
+        // ——這裡照抄上游修法,不要自創。
+        using Stream stream = typeof(RendererPlugin).Assembly.GetManifestResourceStream(
+                                   "GatheringPathRenderer.GBRWorldLocations")
+                               ?? throw new InvalidOperationException(
+                                   "world_locations.json was not found as an embedded resource");
         var root = JsonNode.Parse(stream);
         var result = new Dictionary<uint, List<Vector3>>();
 

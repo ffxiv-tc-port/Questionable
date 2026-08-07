@@ -29,9 +29,14 @@
     </ItemGroup>
 
     <ItemGroup>
-      <None Update="world_locations.json">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </None>
+      <!-- 🔴 不要改回 <None Update>+CopyToOutputDirectory：Dalamud.NET.Sdk 把
+           EnableDefaultNoneItems 設成 false,所以 Update（對一個不存在的隱式 glob
+           item 做更新）是靜默 no-op，檔案永遠不會進 dist/ —— 2026-08-07 實測直接檢查
+           封裝出的 zip 內容才抓到，建置本身 0 error/0 warning。改用內嵌資源，跟
+           RendererPlugin.cs 的 LoadGBRPosData() 讀法配對（照抄上游較新版本的修法）。 -->
+      <EmbeddedResource Include="world_locations.json">
+        <LogicalName>GatheringPathRenderer.GBRWorldLocations</LogicalName>
+      </EmbeddedResource>
     </ItemGroup>
 
 </Project>
