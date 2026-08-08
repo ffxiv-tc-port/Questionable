@@ -75,7 +75,7 @@ internal sealed unsafe class InterruptHandler : IDisposable
         }
         finally
         {
-            _processActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTail);
+            _processActionEffectHook.OriginalDisposeSafe(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTail);
         }
     }
 
