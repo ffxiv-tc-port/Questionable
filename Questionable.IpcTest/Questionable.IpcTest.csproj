@@ -1,4 +1,4 @@
-﻿<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+﻿<Project Sdk="Dalamud.NET.Sdk/13.0.0">
     <PropertyGroup>
         <OutputPath>dist</OutputPath>
         <PathMap Condition="$(SolutionDir) != ''">$(SolutionDir)=X:\</PathMap>
@@ -7,7 +7,7 @@
 
 
     <ItemGroup>
-      <PackageReference Update="DalamudPackager" Version="15.0.0" />
+      <PackageReference Update="DalamudPackager" Version="13.0.0" />
     </ItemGroup>
 
 </Project>

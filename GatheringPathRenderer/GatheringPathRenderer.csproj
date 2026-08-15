@@ -5,6 +5,10 @@
         <PathMap Condition="$(SolutionDir) != ''">$(SolutionDir)=X:\</PathMap>
         <Platforms>x64</Platforms>
         <NoWarn>NU1510</NoWarn>
+
+        <!-- 🔴 見 Questionable.csproj 同名屬性的註解:建 .sln 時不設這個,子模組 ECommons
+             會退回 Debug 並被靜默打包進 dist/。 -->
+        <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
     </PropertyGroup>
 
     <ItemGroup>

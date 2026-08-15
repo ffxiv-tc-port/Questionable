@@ -4,6 +4,16 @@
         <PathMap Condition="$(SolutionDir) != ''">$(SolutionDir)=X:\</PathMap>
         <Platforms>x64</Platforms>
         <NoWarn>NU1510</NoWarn>
+
+        <!-- 🔴 建置 .sln 時,MSBuild 預設會把 Configuration/Platform 從 ProjectReference 上「解掉」
+             (ShouldUnsetParentConfigurationAndPlatform 預設 true),改由方案的設定對應表決定。
+             ECommons 是子模組、刻意沒有被收進 Questionable.sln,查不到對應就退回它自己的
+             預設值 Debug —— 結果 dist/ 裡被塞進 Debug 版的 ECommons.dll,而建置本身
+             0 error/0 warning,完全沒有徵兆。設成 false 讓子專案照樣繼承父專案的 Release|x64。
+             ⚠️ 在 ProjectReference 上寫 SetConfiguration 沒有用:AssignProjectConfiguration
+             會覆寫掉那份 metadata(2026-08-15 實測)。
+             直接建 .csproj 時本來就是繼承,所以這對 CI 與發版路徑是 no-op。 -->
+        <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
     </PropertyGroup>
 
     <PropertyGroup>
