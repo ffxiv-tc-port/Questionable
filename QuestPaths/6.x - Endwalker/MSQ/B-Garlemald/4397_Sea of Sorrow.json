@@ -101,7 +101,7 @@
           },
           "TerritoryId": 959,
           "InteractionType": "WaitForNpcAtPosition",
-          "NpcWaitDistance": 1,
+          "NpcWaitDistance": 15,
           "Mount": true
         },
         {
@@ -113,7 +113,7 @@
           },
           "TerritoryId": 959,
           "InteractionType": "WaitForNpcAtPosition",
-          "NpcWaitDistance": 1
+          "NpcWaitDistance": 15
         },
         {
           "Position": {
@@ -133,7 +133,7 @@
           },
           "TerritoryId": 959,
           "InteractionType": "WaitForNpcAtPosition",
-          "NpcWaitDistance": 1
+          "NpcWaitDistance": 15
         },
         {
           "DataId": 1039985,
@@ -144,7 +144,7 @@
           },
           "TerritoryId": 959,
           "InteractionType": "WaitForNpcAtPosition",
-          "NpcWaitDistance": 1
+          "NpcWaitDistance": 15
         },
         {
           "Position": {
