@@ -551,7 +551,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                         }
                         else if (msqState == MainScenarioQuestState.LoadingScreen)
                         {
-                            _logger.LogWarning("On loading screen, no MSQ - doing nothing");
+                            //_logger.LogWarning("On loading screen, no MSQ - doing nothing");
                             return;
                         }
 
