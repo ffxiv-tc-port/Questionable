@@ -72,6 +72,12 @@ internal sealed class PandorasBoxIpc : IDisposable
             {
                 return _getFeatureEnabled.InvokeFunc("Auto Active Time Maneuver") == true;
             }
+            catch(IpcNotReadyError)
+            {
+                // 同 DisableConflictingFeatures():IPC 還沒註冊時安靜跳過,
+                // 保留 _loggedIpcError 給真正的錯誤用。
+                return false;
+            }
             catch(IpcError e)
             {
                 if (!_loggedIpcError)

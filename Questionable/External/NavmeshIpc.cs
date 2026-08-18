@@ -83,6 +83,11 @@ internal sealed class NavmeshIpc(IDalamudPluginInterface pluginInterface, ILogge
         {
             _pathStop.InvokeAction();
         }
+        catch(IpcNotReadyError)
+        {
+            // vnavmesh 沒註冊 IPC。Stop() 每次 MoveTo() 前都會被呼叫,
+            // 沒裝 vnavmesh 時照原本的寫法會變成每次移動都印一行警告。
+        }
         catch(IpcError e)
         {
             _logger.LogWarning(e, "Could not stop navigating via navmesh");
