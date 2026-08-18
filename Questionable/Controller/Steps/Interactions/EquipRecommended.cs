@@ -67,7 +67,13 @@ internal static class EquipRecommended
                     RecommendEquipModule.Instance()->SetupForClassJob(PlayerState.Instance()->CurrentClassJobId);
                     break;
                 case Configuration.EGearsetUpdateSource.Stylist:
-                    RaptureGearsetModule.Instance()->UpdateGearset(RaptureGearsetModule.Instance()->CurrentGearsetIndex);
+                    // RaptureGearsetModule.Instance() 走 UIModule，UI 尚未建立時回 null（CS 手寫實作）。
+                    // 取不到就 return false ＝ 這個任務被跳過，與上面 InCombat 相同的失敗形式。
+                    RaptureGearsetModule* gearsetModule = RaptureGearsetModule.Instance();
+                    if (gearsetModule == null)
+                        return false;
+
+                    gearsetModule->UpdateGearset(gearsetModule->CurrentGearsetIndex);
                     break;
             }
             return true;

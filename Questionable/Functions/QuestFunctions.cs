@@ -283,7 +283,14 @@ internal sealed unsafe class QuestFunctions
     {
         if (QuestManager.IsQuestComplete(3759)) // Memories Rekindled
         {
-            AgentInterface* questRedoHud = AgentModule.Instance()->GetAgentByInternalId(AgentId.QuestRedoHud);
+            // AgentModule.Instance() 走 UIModule，UI 尚未建立時回 null（CS 手寫實作逐字是
+            // uiModule == null ? null : uiModule->GetAgentModule()）。取不到就當作沒有 NG+ HUD，
+            // 往下走一般 MSQ 判定——與 questRedoHud == null 完全相同的失敗形式。
+            AgentModule* agentModule = AgentModule.Instance();
+            AgentInterface* questRedoHud = null;
+            if (agentModule != null)
+                questRedoHud = agentModule->GetAgentByInternalId(AgentId.QuestRedoHud);
+
             if (questRedoHud != null && questRedoHud->IsAgentActive())
             {
                 // there's surely better ways to check this, but the one in the OOB Plugin was even less reliable
