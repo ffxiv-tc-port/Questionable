@@ -109,7 +109,14 @@ internal sealed class CraftworksSupplyController : IDisposable
             return;
         }
 
-        AtkUnitBase* parentAddon = AtkStage.Instance()->RaptureAtkUnitManager->GetAddonById(parentId);
+        // 走同 repo 既有的守衛版 helper：RaptureAtkUnitManager 與回傳值都判空。
+        // GetAddonById 找不到對應的 addon 時回傳 null，直接解參考 NameString 會是攔不到的 AVE
+        AtkUnitBase* parentAddon = AddonUtils.GetAddonById(parentId);
+        if (parentAddon == null)
+        {
+            return;
+        }
+
         if (parentAddon->NameString is "BankaCraftworksSupply")
         {
             _logger.LogInformation("Picking item for {AddonName}", parentAddon->NameString);

@@ -10,6 +10,7 @@ using Questionable.External;
 using Questionable.Functions;
 using Questionable.Model;
 using Questionable.Model.Questing;
+using Questionable.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -155,7 +156,8 @@ internal static class Craft
                         return ETaskResult.StillRunning;
                     }
 
-                    AtkUnitBase* addon = AtkStage.Instance()->RaptureAtkUnitManager->GetAddonById((ushort)addonId);
+                    // 同上：改走守衛版 helper，避免 RaptureAtkUnitManager 為 null 時裸解參考
+                    AtkUnitBase* addon = AddonUtils.GetAddonById(addonId);
                     if (addon != null)
                     {
                         addon->FireCallbackInt(-1);
