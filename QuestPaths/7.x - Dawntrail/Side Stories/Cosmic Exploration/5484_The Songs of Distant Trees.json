@@ -1,10 +1,7 @@
 ﻿{
   "$schema": "https://qstxiv.github.io/schema/quest-v1.json",
-  "Author": [
-    "Kage",
-    "alydev"
-  ],
-  "LastChecked": {"Username": "alydev", "Date": "2026-08-18"},
+  "Author": "Kiarra",
+  "LastChecked": {"Username": "alydev", "Date": "2026-08-06"},
   "QuestSequence": [
     {
       "Sequence": 0,
@@ -18,9 +15,9 @@
           },
           "TerritoryId": 959,
           "InteractionType": "Interact",
-          "TargetTerritoryId": 1291,
+          "TargetTerritoryId": 1319,
           "Fly": true,
-          "Comment": "Select the destination Phaenna (#2)",
+          "Comment": "Select the destination Auxesia (#4)",
           "DialogueChoices": [
             {
               "Prompt": "TEXT_CTSWKSENTRANCE_00921_SYSTEM_000_000",
@@ -31,13 +28,13 @@
           ]
         },
         {
-          "DataId": 1053219,
+          "DataId": 1056831,
           "Position": {
-            "X": 287.49524,
-            "Y": 52.00211,
-            "Z": -382.9862
+            "X": 363.332,
+            "Y": 204.139,
+            "Z": 397.851
           },
-          "TerritoryId": 1291,
+          "TerritoryId": 1319,
           "InteractionType": "AcceptQuest"
         }
       ]
@@ -46,13 +43,13 @@
       "Sequence": 1,
       "Steps": [
         {
-          "DataId": 1053329,
+          "DataId": 1056833,
           "Position": {
-            "X": 288.74634,
-            "Y": 52.002327,
-            "Z": -381.64343
+            "X": 250.904,
+            "Y": 483.055,
+            "Z": -378.974
           },
-          "TerritoryId": 1291,
+          "TerritoryId": 1319,
           "InteractionType": "Interact"
         }
       ]
@@ -61,23 +58,15 @@
       "Sequence": 2,
       "Steps": [
         {
+          "DataId": 1056834,
           "Position": {
-            "X": 193.92294,
-            "Y": 51.0539,
-            "Z": -435.92035
+            "X": 250.957,
+            "Y": 483.081,
+            "Z": -381.185
           },
-          "TerritoryId": 1291,
-          "InteractionType": "WalkTo"
-        },
-        {
-          "DataId": 1053329,
-          "Position": {
-            "X": 178.63318,
-            "Y": 59.500084,
-            "Z": -449.1137
-          },
-          "TerritoryId": 1291,
-          "InteractionType": "Interact"
+          "TerritoryId": 1319,
+          "InteractionType": "Interact",
+          "StopDistance": 4
         }
       ]
     },
@@ -85,13 +74,13 @@
       "Sequence": 3,
       "Steps": [
         {
-          "DataId": 1053329,
+          "DataId": 1056834,
           "Position": {
-            "X": -237.54039,
-            "Y": -4.605281,
-            "Z": -372.70197
+            "X": 336.5421,
+            "Y": 483.1289,
+            "Z": -277.0652
           },
-          "TerritoryId": 1291,
+          "TerritoryId": 1319,
           "InteractionType": "Interact"
         }
       ]
@@ -100,13 +89,19 @@
       "Sequence": 4,
       "Steps": [
         {
-          "DataId": 1053329,
+          "TerritoryId": 1319,
+          "InteractionType": "Action",
+          "Action": "Duty Action I",
+          "$": "Stellar Return"
+        },
+        {
+          "DataId": 1056834,
           "Position": {
-            "X": -399.0595,
-            "Y": 13.291788,
-            "Z": 476.76926
+            "X": 269.125,
+            "Y": 205.6674,
+            "Z": 359.51294
           },
-          "TerritoryId": 1291,
+          "TerritoryId": 1319,
           "InteractionType": "Interact"
         }
       ]
@@ -115,31 +110,40 @@
       "Sequence": 5,
       "Steps": [
         {
-          "DataId": 2014920,
+          "DataId": 1056834,
           "Position": {
-            "X": -46.72509,
-            "Y": 22.42642,
-            "Z": 417.836
+            "X": -276.47836,
+            "Y": 168.05,
+            "Z": 307.5031
           },
-          "TerritoryId": 1291,
+          "TerritoryId": 1319,
+          "InteractionType": "Interact"
+        }
+      ]
+    },
+    {
+      "Sequence": 6,
+      "Steps": [
+        {
+          "DataId": 2015406,
+          "Position": {
+            "X": -324.0713,
+            "Y": 164.5286,
+            "Z": -160.31
+          },
+          "TerritoryId": 1319,
           "InteractionType": "Interact",
-          "PointMenuChoices": [
-            0,
-            1,
-            2,
-            3,
-            4
-          ],
+          "PointMenuChoices": [0, 1, 2, 3, 4, 5, 7],
           "DialogueChoices": [
             {
-              "Prompt": "TEXT_KINGWK202_05410_Q2_000_000",
+              "Prompt": "TEXT_KINGWK402_05484_Q3_000_000",
               "Type": "YesNo",
               "Yes": true
             },
             {
-              "Prompt": "TEXT_KINGWK202_05410_Q3_000_000",
+              "Prompt": "TEXT_KINGWK402_05484_Q4_000_000",
               "Type": "List",
-              "Answer": "TEXT_KINGWK202_05410_A3_000_001"
+              "Answer": "TEXT_KINGWK402_05484_A4_000_001"
             }
           ]
         }
@@ -149,21 +153,15 @@
       "Sequence": 255,
       "Steps": [
         {
-          "TerritoryId": 1291,
-          "InteractionType": "Action",
-          "Action": "Duty Action I",
-          "$": "Stellar Return"
-        },
-        {
-          "DataId": 1053328,
+          "DataId": 1055138,
           "Position": {
-            "X": 287.49524,
-            "Y": 52.00211,
-            "Z": -382.9862
+            "X": 250.554,
+            "Y": 483.081,
+            "Z": -379.293
           },
-          "TerritoryId": 1291,
+          "TerritoryId": 1319,
           "InteractionType": "CompleteQuest",
-          "NextQuestId": 5448
+          "NextQuestId": 5485
         }
       ]
     }

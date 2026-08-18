@@ -1,6 +1,6 @@
 ﻿{
   "$schema": "https://qstxiv.github.io/schema/quest-v1.json",
-  "Author": "WigglyMuffin",
+  "Author": "alydev",
   "LastChecked": {"Username": "alydev", "Date": "2026-08-18"},
   "QuestSequence": [
     {
@@ -15,9 +15,9 @@
           },
           "TerritoryId": 959,
           "InteractionType": "Interact",
-          "TargetTerritoryId": 1237,
+          "TargetTerritoryId": 1310,
           "Fly": true,
-          "Comment": "Select the destination Sinus Ardorum (#1)",
+          "Comment": "Select the destination Oizys (#3)",
           "DialogueChoices": [
             {
               "Prompt": "TEXT_CTSWKSENTRANCE_00921_SYSTEM_000_000",
@@ -28,14 +28,15 @@
           ]
         },
         {
-          "DataId": 1052617,
+          "DataId": 1053349,
           "Position": {
-            "X": -53.177734,
-            "Y": -3.33786E-06,
-            "Z": -72.129456
+            "X": -214.03827,
+            "Y": 0.49999455,
+            "Z": 67.429565
           },
-          "TerritoryId": 1237,
-          "InteractionType": "AcceptQuest"
+          "TerritoryId": 1310,
+          "InteractionType": "AcceptQuest",
+          "DisableNavmesh": true
         }
       ]
     },
@@ -43,18 +44,18 @@
       "Sequence": 1,
       "Steps": [
         {
-          "DataId": 1052624,
+          "DataId": 1052644,
           "Position": {
-            "X": -42.008118,
-            "Y": 11.869998,
-            "Z": -95.75043
+            "X": -204.42517,
+            "Y": 0.49999294,
+            "Z": 66.48352
           },
-          "TerritoryId": 1237,
+          "TerritoryId": 1310,
           "InteractionType": "Interact",
           "DialogueChoices": [
             {
+              "Prompt": "TEXT_KINGWK401_05483_SYSTEM_000_026",
               "Type": "YesNo",
-              "Prompt": "TEXT_KINGWK201_05409_SYSTEM_100_021",
               "Yes": true
             }
           ]
@@ -65,15 +66,15 @@
       "Sequence": 255,
       "Steps": [
         {
-          "DataId": 1053219,
+          "DataId": 1056831,
           "Position": {
-            "X": 287.49524,
-            "Y": 52.00211,
-            "Z": -382.9862
+            "X": 363.302,
+            "Y": 204.1391,
+            "Z": 397.8484
           },
-          "TerritoryId": 1291,
+          "TerritoryId": 1319,
           "InteractionType": "CompleteQuest",
-          "NextQuestId": 5410
+          "NextQuestId": 5484
         }
       ]
     }
