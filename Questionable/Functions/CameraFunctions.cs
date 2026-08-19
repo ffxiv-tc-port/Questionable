@@ -141,7 +141,21 @@ internal sealed unsafe class CameraFunctions : IDisposable
 
             if (IgnoreUserInput || inputMode == 0) // let user override...
             {
-                float dt = Framework.Instance()->FrameDeltaTime;
+                // 🔴 上面那圈 try/catch 擋的是「特徵碼失配 -> ThrowNullAddress 丟
+                //    InvalidOperationException」，但那不是這裡唯一的失敗形式。
+                //    Framework.Instance() 是 [StaticAddress("48 8B 1D ?? ?? ?? ?? 8B 7C 24 64", 3,
+                //    isPointer: true)]，產生器對 isPointer:true 產出的是
+                //    「if (ppInstance is null) Throw...; return *ppInstance;」——
+                //    判空判的是**外層指標槽的位址**，回傳的卻是**槽裡的內容**，
+                //    而那個內容在遊戲還沒建好／正在拆掉 Framework 時合法為 null，從沒被判過。
+                //    裸解參考它是 AccessViolationException（corrupted-state，catch 攔不到），
+                //    而這個 detour 由原生程式碼直接呼叫，沒有第二道防線。
+                // fail-closed：拿不到就當這一幀 dt = 0。Original() 已先跑過，
+                //    遊戲自己的鏡頭處理原封不動。每幀都會跑，刻意不寫 log。
+                // ⚠️ 注意 dt 在本方法目前沒有任何讀取端（maxH/maxV 是固定的 Deg2Rad(180)）——
+                //    保留這個讀取以免回退既有行為，但它現在只是個安全的無用讀取。
+                Framework* framework = Framework.Instance();
+                float dt = framework == null ? 0f : framework->FrameDeltaTime;
                 float deltaH = Normalized(DesiredAzimuth - self->DirH);
                 float deltaV = Normalized(DesiredAltitude - self->DirV);
                 float maxH = Deg2Rad(180);
