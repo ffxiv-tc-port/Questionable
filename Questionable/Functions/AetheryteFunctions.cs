@@ -118,7 +118,10 @@ internal sealed unsafe class AetheryteFunctions
         }
 
         bool freeFavoredSlotsAvailable = false;
-        for(int i = 0; i < playerState->FavouriteAetheryteCount; i++)
+        // FavouriteAetheryteCount 是遊戲寫入的 byte，FavouriteAetherytes 是 FixedSizeArray4 ——
+        // 兩者無結構保證，夾到容量內，越界時安靜少讀。
+        int favouriteCount = Math.Min((int)playerState->FavouriteAetheryteCount, playerState->FavouriteAetherytes.Length);
+        for(int i = 0; i < favouriteCount; i++)
         {
             if (playerState->FavouriteAetherytes[i] == (ushort)aetheryteLocation)
             {

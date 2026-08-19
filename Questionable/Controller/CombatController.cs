@@ -324,7 +324,9 @@ internal sealed class CombatController : IDisposable
 
             // stuff on our enmity list that's not necessarily targeting us
             Hater haters = UIState.Instance()->Hater;
-            for(int i = 0; i < haters.HaterCount; ++i)
+            // HaterCount 是遊戲寫入的 int，Haters 是 FixedSizeArray32 —— 兩者無結構保證，夾到容量內。
+            int haterCount = Math.Min(haters.HaterCount, haters.Haters.Length);
+            for(int i = 0; i < haterCount; ++i)
             {
                 HaterInfo hater = haters.Haters[i];
                 if (hater.EntityId == gameObject.GameObjectId)
