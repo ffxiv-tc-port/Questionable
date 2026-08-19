@@ -756,6 +756,27 @@ internal sealed unsafe class QuestFunctions
         return UIState.Instance()->IsUnlockLinkUnlocked(unlockLinkId.Value);
     }
 
+    /// <summary>
+    /// 「移除已完成的任務」專用的完成判定。
+    /// 每日聯盟(蠻族)任務屬於可重複任務,完成後不會被寫進永久完成旗標,
+    /// 因此 <see cref="IsQuestComplete(ElementId)"/> 對它們永遠回 false ——
+    /// 這類任務必須改查「本日是否已完成」。
+    /// 判定條件與 <see cref="IsDailyAlliedSocietyQuest"/> 相同,
+    /// 但改走 TryGetQuestInfo 以免未知任務 ID 讓 GetQuestInfo 擲出例外
+    /// (本方法在 ImGui 繪製回呼裡執行,擲例外會讓整個視窗畫不出來)。
+    /// </summary>
+    public bool IsQuestFinishedForPriorityRemoval(ElementId elementId)
+    {
+        if (elementId is QuestId questId &&
+            _questData.TryGetQuestInfo(questId, out IQuestInfo? questInfo) &&
+            questInfo is QuestInfo { IsRepeatable: true, AlliedSociety: not EAlliedSociety.None })
+        {
+            return QuestManager.Instance()->IsDailyQuestCompleted(questId.Value);
+        }
+
+        return IsQuestComplete(elementId);
+    }
+
     public bool IsQuestLocked(ElementId elementId, ElementId? extraCompletedQuest = null)
     {
         if (elementId is QuestId questId)
