@@ -764,6 +764,8 @@ internal sealed unsafe class QuestFunctions
     /// 判定條件與 <see cref="IsDailyAlliedSocietyQuest"/> 相同,
     /// 但改走 TryGetQuestInfo 以免未知任務 ID 讓 GetQuestInfo 擲出例外
     /// (本方法在 ImGui 繪製回呼裡執行,擲例外會讓整個視窗畫不出來)。
+    /// 另外,仍掛在日誌上(已接取未交付)的每日聯盟任務一律不算已完成,
+    /// 以免使用者還要交付的任務被「移除已完成的任務」掃掉。
     /// </summary>
     public bool IsQuestFinishedForPriorityRemoval(ElementId elementId)
     {
@@ -771,6 +773,12 @@ internal sealed unsafe class QuestFunctions
             _questData.TryGetQuestInfo(questId, out IQuestInfo? questInfo) &&
             questInfo is QuestInfo { IsRepeatable: true, AlliedSociety: not EAlliedSociety.None })
         {
+            // 已接取但還沒交付的,不管本日完成旗標怎麼寫都不該被移除。
+            if (IsQuestAccepted(questId))
+            {
+                return false;
+            }
+
             return QuestManager.Instance()->IsDailyQuestCompleted(questId.Value);
         }
 
