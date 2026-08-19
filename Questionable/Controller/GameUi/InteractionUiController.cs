@@ -533,7 +533,23 @@ internal sealed class InteractionUiController : IDisposable
                 {
                     unsafe
                     {
-                        if (RaptureHotbarModule.Instance()->DutyActionsPresent)
+                        // 🔴 RaptureHotbarModule.Instance() 不是 [StaticAddress] 產生器產出的，是手寫包裝：
+                        //    「var uiModule = UI.UIModule.Instance(); return uiModule == null ? null : uiModule->GetRaptureHotbarModule();」
+                        //    （Dalamud lib/FFXIVClientStructs/.../Client/UI/Misc/RaptureHotbarModule.cs:15-18）
+                        //    ⇒ 回 null 是合法結果。原本 ->DutyActionsPresent（FieldOffset 0x2A520）是對 null 裸解參考
+                        //    ＝AccessViolationException；下面那個 catch 攔不到它（AVE 在 .NET Core 是
+                        //    corrupted-state exception），所以必須顯式判空。
+                        // fail-closed：讀不到就跳過這個對話選項，與下面 catch 區塊「檢查失敗就 continue」
+                        //    的既有處置一致——不在無法確認前提的情況下替使用者選任務對話。
+                        RaptureHotbarModule* hotbarModule = RaptureHotbarModule.Instance();
+                        if (hotbarModule == null)
+                        {
+                            _logger.LogInformation(
+                                "NoDutyActions: RaptureHotbarModule 尚未就緒，無法確認任務技能狀態，跳過此對話選項");
+                            continue;
+                        }
+
+                        if (hotbarModule->DutyActionsPresent)
                         {
                             _logger.LogInformation("NoDutyActions: actions present, skipping dialogue choice");
                             continue;
