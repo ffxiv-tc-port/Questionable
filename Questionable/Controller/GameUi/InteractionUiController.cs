@@ -202,7 +202,9 @@ internal sealed class InteractionUiController : IDisposable
             return;
         }
 
-        string? actualPrompt = AtkValueAdapter.ReadString(addonSelectString->AtkUnitBase.AtkValues[2]);
+        // 🔴 AtkValues 是指標欄位,addon 剛 setup／正在拆解時為 null(長度另存 AtkValuesCount)。
+        // 走 AtkValueAdapter 的邊界安全多載＝addon 判空＋陣列判空＋索引在界內三道一起。
+        string? actualPrompt = AtkValueAdapter.ReadString(&addonSelectString->AtkUnitBase, 2);
         if (actualPrompt == null)
         {
             return;
@@ -211,9 +213,9 @@ internal sealed class InteractionUiController : IDisposable
         List<string?> answers = [];
         for(ushort i = 7; i < addonSelectString->AtkUnitBase.AtkValuesCount; ++i)
         {
-            if (addonSelectString->AtkUnitBase.AtkValues[i].Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.String)
+            if (AtkValueAdapter.ReadType(&addonSelectString->AtkUnitBase, i) == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.String)
             {
-                answers.Add(AtkValueAdapter.ReadString(addonSelectString->AtkUnitBase.AtkValues[i]));
+                answers.Add(AtkValueAdapter.ReadString(&addonSelectString->AtkUnitBase, i));
             }
         }
 
@@ -239,7 +241,7 @@ internal sealed class InteractionUiController : IDisposable
             return;
         }
 
-        string? actualPrompt = AtkValueAdapter.ReadString(addonCutSceneSelectString->AtkUnitBase.AtkValues[2]);
+        string? actualPrompt = AtkValueAdapter.ReadString(&addonCutSceneSelectString->AtkUnitBase, 2);
         if (actualPrompt == null)
         {
             return;
@@ -248,7 +250,7 @@ internal sealed class InteractionUiController : IDisposable
         List<string?> answers = [];
         for(int i = 5; i < addonCutSceneSelectString->AtkUnitBase.AtkValuesCount; ++i)
         {
-            answers.Add(AtkValueAdapter.ReadString(addonCutSceneSelectString->AtkUnitBase.AtkValues[i]));
+            answers.Add(AtkValueAdapter.ReadString(&addonCutSceneSelectString->AtkUnitBase, i));
         }
 
         int? answer = HandleListChoice(actualPrompt, answers, checkAllSteps);
@@ -271,7 +273,7 @@ internal sealed class InteractionUiController : IDisposable
             return;
         }
 
-        string? actualPrompt = AtkValueAdapter.ReadString(addonSelectIconString->AtkUnitBase.AtkValues[3]);
+        string? actualPrompt = AtkValueAdapter.ReadString(&addonSelectIconString->AtkUnitBase, 3);
         if (string.IsNullOrEmpty(actualPrompt))
         {
             actualPrompt = null;
@@ -287,7 +289,7 @@ internal sealed class InteractionUiController : IDisposable
         }
 
         // this is 'Daily Quests' for tribal quests, but not set for normal selections
-        string? title = AtkValueAdapter.ReadString(addonSelectIconString->AtkValues[0]);
+        string? title = AtkValueAdapter.ReadString(&addonSelectIconString->AtkUnitBase, 0);
 
         QuestController.QuestProgress? currentQuest = _questController.StartedQuest;
         if (currentQuest != null && (actualPrompt == null || title != null))
@@ -337,12 +339,29 @@ internal sealed class InteractionUiController : IDisposable
         return false;
     }
 
+    /// <remarks>
+    /// 🔴 這裡有兩層都沒驗過:①迴圈次數本身就是從未驗證的 <c>AtkValues[5]</c> 讀出來的
+    /// ②元素索引 <c>i * 3 + 7</c> 從沒和 <c>AtkValuesCount</c> 比過。
+    /// <c>AtkValues</c> 為 null 時是 AccessViolationException(corrupted-state exception,
+    /// <c>try</c>/<c>catch</c> 攔不到);長度不足時讀的是陣列後方的堆積垃圾,型別欄位是隨機值
+    /// ⇒ 可能通過 <c>String.HasValue</c> 再拿垃圾當字串指標去讀。
+    /// <para>失敗語意:界外就停止收集(回目前為止的清單)。呼叫端
+    /// <c>HandleListChoice</c> 本來就用「答案文字比對」在挑,少收到幾筆等於這一幀沒配對到,
+    /// 下一次 PostSetup／PostRefresh 還會再進來。</para>
+    /// </remarks>
     public static unsafe List<string?> GetChoices(AddonSelectIconString* addonSelectIconString)
     {
         List<string?> answers = [];
-        for(ushort i = 0; i < addonSelectIconString->AtkUnitBase.AtkValues[5].Int; i++)
+        int valueCount = addonSelectIconString == null ? 0 : addonSelectIconString->AtkUnitBase.AtkValuesCount;
+        int count = AtkValueAdapter.ReadInt(&addonSelectIconString->AtkUnitBase, 5);
+        for(ushort i = 0; i < count; i++)
         {
-            answers.Add(AtkValueAdapter.ReadString(addonSelectIconString->AtkValues[i * 3 + 7]));
+            if (i * 3 + 7 >= valueCount)
+            {
+                break;
+            }
+
+            answers.Add(AtkValueAdapter.ReadString(&addonSelectIconString->AtkUnitBase, i * 3 + 7));
         }
 
         return answers;
@@ -669,7 +688,7 @@ internal sealed class InteractionUiController : IDisposable
             return;
         }
 
-        string? actualPrompt = AtkValueAdapter.ReadString(addonSelectYesno->AtkUnitBase.AtkValues[0]);
+        string? actualPrompt = AtkValueAdapter.ReadString(&addonSelectYesno->AtkUnitBase, 0);
         if (actualPrompt == null)
         {
             return;

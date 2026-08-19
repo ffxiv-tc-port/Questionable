@@ -99,9 +99,15 @@ internal static class DoGather
                         }
                         else
                         {
+                            // 🔴 AtkValues 是指標欄位(addon 剛 setup／正在拆解時為 null),
+                            // 長度另存在 AtkValuesCount。裸讀 [109]/[110] 在 null 時是
+                            // AccessViolationException(corrupted-state exception,try/catch 攔不到),
+                            // 長度不足時讀的是陣列後方的堆積垃圾 —— 而這兩個值是「完整度」,
+                            // 垃圾值會讓 GetNextActions 依它挑技能。讀不到就當作 0/0
+                            // (與 GatheringMasterpiece 那邊「讀不到 ⇒ 不進場」同語意)。
                             NodeCondition nodeCondition = new(
-                                addonGathering->AtkValues[109].UInt,
-                                addonGathering->AtkValues[110].UInt);
+                                ECommons.GenericHelpers.GetAtkValueUInt(&addonGathering->AtkUnitBase, 109),
+                                ECommons.GenericHelpers.GetAtkValueUInt(&addonGathering->AtkUnitBase, 110));
                             logger.LogDebug($"NodeCondition: {nodeCondition.CurrentIntegrity}/{nodeCondition.MaxIntegrity}");
 
                             if (_actionQueue != null && _actionQueue.TryPeek(out EAction nextAction))

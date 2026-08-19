@@ -139,10 +139,28 @@ internal static class DoGatherCollectable
             return ETaskResult.StillRunning;
         }
 
+        /// <remarks>
+        /// 🔴 <c>TryGetAddonByName</c> 只保證 addon 指標非 null,**保證不了 <c>AtkValues</c>** ——
+        /// 那是 <c>AtkUnitBase</c> 偏移 0x178 的指標欄位,addon 剛 setup／正在拆解時是 null,
+        /// 陣列長度另存在 <c>AtkValuesCount</c>。這正是「鏈深 N+1 層只查了 N 層」的假守衛:
+        /// null 時 <c>atkValues[63]</c> 是從位址 0x3F0 讀 ＝ AccessViolationException
+        /// (corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到);長度不足時
+        /// 索引 62／63 讀的是陣列後方的堆積垃圾,會被 <c>GetNextActions</c> 當成真的完整度／
+        /// 收藏價值拿去比大小並放技能。
+        /// <para>失敗語意:回 <see langword="null"/>,與「視窗不在」完全相同 ——
+        /// 呼叫端本來就有處理 <see langword="null"/> 的路徑(不進場、下一幀重試)。</para>
+        /// <para>📌 同一組索引在 visland <c>GatheringAddon.GatheringMasterpiece</c> 已是這樣守的,
+        /// 這裡是同一形狀的漏網。</para>
+        /// </remarks>
         private unsafe NodeCondition? GetNodeCondition()
         {
             if (gameGui.TryGetAddonByName("GatheringMasterpiece", out AtkUnitBase* atkUnitBase))
             {
+                if (atkUnitBase == null || atkUnitBase->AtkValues == null || atkUnitBase->AtkValuesCount <= 63)
+                {
+                    return null;
+                }
+
                 AtkValue* atkValues = atkUnitBase->AtkValues;
                 return new(
                     atkValues[13].UInt,

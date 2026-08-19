@@ -294,7 +294,10 @@ internal sealed unsafe class QuestFunctions
             if (questRedoHud != null && questRedoHud->IsAgentActive())
             {
                 // there's surely better ways to check this, but the one in the OOB Plugin was even less reliable
+                // 🔴 AtkValuesCount 與 AtkValues 是兩個獨立欄位:長度對得上不代表指標已配置
+                //（拆解途中兩者的更新沒有原子性）。少判一個就是半套守衛。
                 if (_gameGui.TryGetAddonByName<AtkUnitBase>("QuestRedoHud", out AtkUnitBase* addon) &&
+                    addon != null && addon->AtkValues != null &&
                     addon->AtkValuesCount == 4 &&
                     // 0 seems to be active,
                     // 1 seems to be paused,
