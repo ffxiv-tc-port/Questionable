@@ -37,7 +37,27 @@ internal sealed class TextAdvanceIpc : IDisposable
         _framework.Update -= OnUpdate;
         if (_isExternalControlActivated)
         {
-            _disableExternalControl.InvokeFunc(_pluginName);
+            // Plugin unload order is not guaranteed, so TextAdvance may already be
+            // gone - InvokeFunc then throws IpcNotReadyError. That matters more than
+            // it looks here: Questionable tears down via ServiceProvider.Dispose(),
+            // which does NOT swallow exceptions, so one throw aborts disposal of
+            // every remaining service and also skips the ECommonsMain.Dispose()
+            // call that follows it in QuestionablePlugin.Dispose(), leaving
+            // ECommons' own hooks installed.
+            //
+            // Same bug class as BOCCHI's Wrath.ReleaseControl; found by the
+            // 2026-07-29 fleet scan. If TextAdvance is already unloaded then its
+            // external-control state died with it and there is nothing to release.
+            try
+            {
+                _disableExternalControl.InvokeFunc(_pluginName);
+            }
+            catch (Exception e)
+            {
+                ECommons.DalamudServices.Svc.Log.Warning(e,
+                    "Could not release TextAdvance external control during dispose "
+                    + "(TextAdvance is most likely already unloaded)");
+            }
         }
     }
 

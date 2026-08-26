@@ -1,31 +1,53 @@
-<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+<Project Sdk="Dalamud.NET.Sdk/13.0.0">
     <PropertyGroup>
         <Version>0.10</Version>
         <OutputPath>dist</OutputPath>
         <PathMap Condition="$(SolutionDir) != ''">$(SolutionDir)=X:\</PathMap>
         <Platforms>x64</Platforms>
         <NoWarn>NU1510</NoWarn>
+
+        <!-- 🔴 見 Questionable.csproj 同名屬性的註解:建 .sln 時不設這個,子模組 ECommons
+             會退回 Debug 並被靜默打包進 dist/。 -->
+        <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
     </PropertyGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Questionable.Model\Questionable.Model.csproj" />
+      <!-- 🔴 必須用子模組的 ECommons（與 Questionable 主專案同源），不可用 NuGet 套件：
+           NuGet 上的 ECommons 3.2.0.16 是 API15 世代（net10.0），與本艦隊釘的 API13
+           （net9.0）不相容，會編得過但載不起來。判準＝obj/project.assets.json 裡
+           ECommons 的 type 要是 project 而不是 package。 -->
+      <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />
+
+      <!-- Pictomancy 原本是 NuGet 套件 Pictomancy 0.0.1(上游 sourpuh 發佈的版本)。
+           2026-08-19 用 SHA-256 確認這是個靜默缺口:GatheringPathRenderer/dist/Pictomancy.dll
+           與 NuGet 快取 pictomancy/0.0.1/lib/net9.0-windows7.0/Pictomancy.dll 位元組完全相同
+           (5edb0429…、檔案日期停在 2025-08-06),也就是艦隊在 ffxiv_pictomancy fork 上做的
+           任何修正這裡一項都吃不到,失敗形式與 ECommons 那次一樣完全靜默。
+           改成引用子模組原始碼,並與 ICE、Splatoon、Ocelot、AutoDuty 釘同一個 commit(788bc33)。
+           ⚠️ 不要改回 PackageReference:Pictomancy 0.0.2 以後只發 net10.0-windows7.0,
+              0.0.1 是最後一個支援 net9.0-windows7.0 的版本,升版 restore 會 NU1202。 -->
+      <ProjectReference Include="..\ffxiv_pictomancy\Pictomancy\Pictomancy.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="ECommons" Version="3.2.0.16" />
-      <PackageReference Include="Pictomancy" Version="1.0.3" />
       <PackageReference Include="System.Net.Http" Version="4.3.4" />
       <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Update="DalamudPackager" Version="15.0.0" />
+      <PackageReference Update="DalamudPackager" Version="13.0.0" />
     </ItemGroup>
 
     <ItemGroup>
-      <None Update="world_locations.json">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </None>
+      <!-- 🔴 不要改回 <None Update>+CopyToOutputDirectory：Dalamud.NET.Sdk 把
+           EnableDefaultNoneItems 設成 false,所以 Update（對一個不存在的隱式 glob
+           item 做更新）是靜默 no-op，檔案永遠不會進 dist/ —— 2026-08-07 實測直接檢查
+           封裝出的 zip 內容才抓到，建置本身 0 error/0 warning。改用內嵌資源，跟
+           RendererPlugin.cs 的 LoadGBRPosData() 讀法配對（照抄上游較新版本的修法）。 -->
+      <EmbeddedResource Include="world_locations.json">
+        <LogicalName>GatheringPathRenderer.GBRWorldLocations</LogicalName>
+      </EmbeddedResource>
     </ItemGroup>
 
 </Project>

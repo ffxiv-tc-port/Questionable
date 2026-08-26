@@ -324,7 +324,9 @@ internal sealed class CombatController : IDisposable
 
             // stuff on our enmity list that's not necessarily targeting us
             Hater haters = UIState.Instance()->Hater;
-            for(int i = 0; i < haters.HaterCount; ++i)
+            // HaterCount 是遊戲寫入的 int，Haters 是 FixedSizeArray32 —— 兩者無結構保證，夾到容量內。
+            int haterCount = Math.Min(haters.HaterCount, haters.Haters.Length);
+            for(int i = 0; i < haterCount; ++i)
             {
                 HaterInfo hater = haters.Haters[i];
                 if (hater.EntityId == gameObject.GameObjectId)
@@ -541,8 +543,24 @@ internal sealed class CombatController : IDisposable
 
         RaycastHit hit;
         int* flags = stackalloc int[] { 0x4000, 0, 0x4000, 0 };
+
+        // 🔴 Framework.Instance() 是 [StaticAddress("48 8B 1D ?? ?? ?? ?? 8B 7C 24 64", 3, isPointer: true)]
+        //    （Dalamud 自帶的 lib/FFXIVClientStructs/.../Client/System/Framework/Framework.cs:23）
+        //    ——isPointer:true 的產生器回的是全域指標槽的**內容**，遊戲還沒建好／正在拆掉 Framework 時
+        //    合法為 null；BGCollisionModule（FieldOffset 0x2B58）也只是普通指標欄位，場景載入前同樣可能是 null。
+        //    原本整條裸鏈解參考就是 AccessViolationException，而 AVE 在 .NET Core 是 corrupted-state
+        //    exception，try/catch 攔不到，沒有第二道防線。
+        // fail-closed：拿不到碰撞模組就回 false＝「視線被擋」。唯一呼叫點 MoveToTarget() 對 false 的反應是
+        //    「往目標移動靠近」，那正是視線真的被擋時該做的事，退化行為是良性的（走近一點，不會亂放技能）。
+        //    回 true 才危險：等於在零依據下宣稱「看得到」，讓戰鬥流程以為已就位而停在原地。
+        // 熱路徑（每次距離檢查都會呼叫），刻意不寫 log。
+        Framework* framework = Framework.Instance();
+        BGCollisionModule* collision = framework != null ? framework->BGCollisionModule : null;
+        if (collision == null)
+            return false;
+
         bool isLoSBlocked =
-            Framework.Instance()->BGCollisionModule->RaycastMaterialFilter(&hit, &originVect, &directionVect, distance,
+            collision->RaycastMaterialFilter(&hit, &originVect, &directionVect, distance,
                 1, flags);
 
         return !isLoSBlocked;

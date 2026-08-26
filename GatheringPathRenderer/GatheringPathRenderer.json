@@ -3,6 +3,6 @@
   "Author": "alydev",
   "Punchline": "[Questionable dev plugin]: Renders gathering location.",
   "Description": "[Questionable dev plugin]: Renders gathering location using Pictomancy.",
-  "RepoUrl": "https://github.com/PunishXIV/Questionable/tree/main/GatheringPathRenderer",
-  "DalamudApiLevel": 14
+  "RepoUrl": "https://github.com/ffxiv-tc-port/Questionable/tree/tc-7.20/GatheringPathRenderer",
+  "DalamudApiLevel": 13
 }

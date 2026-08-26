@@ -22,6 +22,7 @@ using System.Globalization;
 using System.Linq;
 using GrandCompany = FFXIVClientStructs.FFXIV.Client.UI.Agent.GrandCompany;
 using Quest = Questionable.Model.Quest;
+using static Questionable.Utils.CacheUtils;
 
 namespace Questionable.Functions;
 
@@ -259,7 +260,7 @@ internal sealed unsafe class QuestFunctions
             return new(firstTrackedQuest, firstTrackedSequence, msqQuest.State);
         }
 
-        ElementId? priorityQuest = GetNextPriorityQuestsThatCanBeAccepted()
+        ElementId? priorityQuest = NextPriorityQuestsThatCanBeAccepted
             .Where(x => x.IsAvailable)
             .Select(x => x.QuestId)
             .FirstOrDefault();
@@ -282,11 +283,21 @@ internal sealed unsafe class QuestFunctions
     {
         if (QuestManager.IsQuestComplete(3759)) // Memories Rekindled
         {
-            AgentInterface* questRedoHud = AgentModule.Instance()->GetAgentByInternalId(AgentId.QuestRedoHud);
+            // AgentModule.Instance() 走 UIModule，UI 尚未建立時回 null（CS 手寫實作逐字是
+            // uiModule == null ? null : uiModule->GetAgentModule()）。取不到就當作沒有 NG+ HUD，
+            // 往下走一般 MSQ 判定——與 questRedoHud == null 完全相同的失敗形式。
+            AgentModule* agentModule = AgentModule.Instance();
+            AgentInterface* questRedoHud = null;
+            if (agentModule != null)
+                questRedoHud = agentModule->GetAgentByInternalId(AgentId.QuestRedoHud);
+
             if (questRedoHud != null && questRedoHud->IsAgentActive())
             {
                 // there's surely better ways to check this, but the one in the OOB Plugin was even less reliable
+                // 🔴 AtkValuesCount 與 AtkValues 是兩個獨立欄位:長度對得上不代表指標已配置
+                //（拆解途中兩者的更新沒有原子性）。少判一個就是半套守衛。
                 if (_gameGui.TryGetAddonByName<AtkUnitBase>("QuestRedoHud", out AtkUnitBase* addon) &&
+                    addon != null && addon->AtkValues != null &&
                     addon->AtkValuesCount == 4 &&
                     // 0 seems to be active,
                     // 1 seems to be paused,
@@ -449,7 +460,9 @@ internal sealed unsafe class QuestFunctions
         }
     }
 
-    public List<PriorityQuestInfo> GetNextPriorityQuestsThatCanBeAccepted()
+    private CachedValue<List<PriorityQuestInfo>> _nextPriorityQuests = new(ttlSeconds: 2);
+    public List<PriorityQuestInfo> NextPriorityQuestsThatCanBeAccepted => _nextPriorityQuests.Get(GetNextPriorityQuestsThatCanBeAccepted);
+    private List<PriorityQuestInfo> GetNextPriorityQuestsThatCanBeAccepted()
     {
         // ideally, we'd also be able to afford *some* teleports
         // this implicitly makes sure we're not starting one of the lv1 class quests if we can't afford to teleport back
@@ -744,6 +757,35 @@ internal sealed unsafe class QuestFunctions
     public bool IsQuestComplete(UnlockLinkId unlockLinkId)
     {
         return UIState.Instance()->IsUnlockLinkUnlocked(unlockLinkId.Value);
+    }
+
+    /// <summary>
+    /// 「移除已完成的任務」專用的完成判定。
+    /// 每日聯盟(蠻族)任務屬於可重複任務,完成後不會被寫進永久完成旗標,
+    /// 因此 <see cref="IsQuestComplete(ElementId)"/> 對它們永遠回 false ——
+    /// 這類任務必須改查「本日是否已完成」。
+    /// 判定條件與 <see cref="IsDailyAlliedSocietyQuest"/> 相同,
+    /// 但改走 TryGetQuestInfo 以免未知任務 ID 讓 GetQuestInfo 擲出例外
+    /// (本方法在 ImGui 繪製回呼裡執行,擲例外會讓整個視窗畫不出來)。
+    /// 另外,仍掛在日誌上(已接取未交付)的每日聯盟任務一律不算已完成,
+    /// 以免使用者還要交付的任務被「移除已完成的任務」掃掉。
+    /// </summary>
+    public bool IsQuestFinishedForPriorityRemoval(ElementId elementId)
+    {
+        if (elementId is QuestId questId &&
+            _questData.TryGetQuestInfo(questId, out IQuestInfo? questInfo) &&
+            questInfo is QuestInfo { IsRepeatable: true, AlliedSociety: not EAlliedSociety.None })
+        {
+            // 已接取但還沒交付的,不管本日完成旗標怎麼寫都不該被移除。
+            if (IsQuestAccepted(questId))
+            {
+                return false;
+            }
+
+            return QuestManager.Instance()->IsDailyQuestCompleted(questId.Value);
+        }
+
+        return IsQuestComplete(elementId);
     }
 
     public bool IsQuestLocked(ElementId elementId, ElementId? extraCompletedQuest = null)

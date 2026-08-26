@@ -6,6 +6,7 @@ using Dalamud.Plugin.Ipc.Exceptions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller.NavigationOverrides;
 using Questionable.Data;
@@ -36,6 +37,7 @@ internal sealed class MovementController
     IObjectTable objectTable,
     AetheryteData aetheryteData,
     ICommandManager commandManager,
+    IServiceProvider serviceProvider,
     ILogger<MovementController> logger) : IDisposable
 {
     public ICommandManager CommandManager { get; } = commandManager;
@@ -148,6 +150,9 @@ internal sealed class MovementController
                 throw new PathfindingFailedException();
             }
         }
+
+        if (!serviceProvider.GetRequiredService<QuestController>().IsQuestingActive)
+            return;
 
         if (IsPathRunning && Destination != null)
         {
@@ -408,7 +413,7 @@ internal sealed class MovementController
         else if (Environment.TickCount64 - Destination.LastWaypoint.UpdatedAt > 500)
         {
             // check whether we've made any progress of any kind
-            if (Math.Abs(distance - Destination.LastWaypoint.Distance2DAtLastUpdate) < 0.5f)
+            if (Math.Abs(distance - Destination.LastWaypoint.Distance2DAtLastUpdate) < 0.5f && !condition[ConditionFlag.WatchingCutscene])
             {
                 int calculations = Destination.NavmeshCalculations;
                 if (calculations % 6 == 1)

@@ -91,7 +91,8 @@ internal sealed class QuestJournalUtils
         }
 
         if (ImGui.Checkbox("Show only Available Quests".Loc(), ref journalUi.Filter.AvailableOnly) ||
-            ImGui.Checkbox("Hide Quests Without Path".Loc(), ref journalUi.Filter.HideNoPaths))
+            ImGui.Checkbox("Hide Quests Without Path".Loc(), ref journalUi.Filter.HideNoPaths) ||
+            ImGui.Checkbox("Hide Completed Quests".Loc(), ref journalUi.Filter.HideCompleted))
         {
             journalUi.UpdateFilter();
         }

@@ -103,7 +103,7 @@ internal sealed class PriorityWindow : LWindow
         }
         if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Check, "Remove finished Quests".Loc()))
         {
-            _questController.ManualPriorityQuests.RemoveAll(q => _questFunctions.IsQuestComplete(q.Id));
+            _questController.ManualPriorityQuests.RemoveAll(q => _questFunctions.IsQuestFinishedForPriorityRemoval(q.Id));
         }
         ImGui.SameLine();
 

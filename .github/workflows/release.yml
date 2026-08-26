@@ -19,7 +19,7 @@ jobs:
       - name: Download Dalamud (pinned TC-compatible build)
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri https://github.com/ffxiv-tc-port/DalamudPluginsTC/releases/download/dalamud-pin-v12.0.2/dalamud-api12-net9.zip -OutFile dalamud-pinned.zip
+          Invoke-WebRequest -Uri https://github.com/ffxiv-tc-port/DalamudPluginsTC/releases/download/dalamud-pin-v13.0.0.16/dalamud-api13-net9.zip -OutFile dalamud-pinned.zip
           Expand-Archive -Force dalamud-pinned.zip "$env:AppData\FFXIVSimpleLauncher\Dalamud\Injector\"
           Expand-Archive -Force dalamud-pinned.zip "$env:AppData\xivlauncher\Addon\Hooks\dev\"
       - name: Compute version
@@ -39,8 +39,23 @@ jobs:
       - name: Rename artifact to Questionable.zip
         shell: pwsh
         run: |
-          $zip = Get-ChildItem -Path . -Recurse -Filter latest.zip | Select-Object -First 1
-          Copy-Item $zip.FullName -Destination "Questionable.zip"
+          # 直接指名輸出路徑，不要用 -Recurse 找 latest.zip：加了 GatheringPathRenderer
+          # 之後同一棵樹底下會有兩個 latest.zip，萬用字元搜尋的順序不保證,撿錯一個就會把
+          # GatheringPathRenderer 的資產包成 Questionable.zip。
+          Copy-Item './Questionable/dist/Questionable/latest.zip' -Destination 'Questionable.zip'
+      - name: Build with dotnet (GatheringPathRenderer)
+        run: dotnet build --configuration Release GatheringPathRenderer/GatheringPathRenderer.csproj -p:DalamudLibPath="$env:AppData\FFXIVSimpleLauncher\Dalamud\Injector\" -p:Version=${{ env.VER }} -p:AssemblyVersion=${{ env.VER }} -p:FileVersion=${{ env.VER }}
+      - name: write version into manifest (GatheringPathRenderer)
+        shell: pwsh
+        run: |
+          $path = './GatheringPathRenderer/dist/GatheringPathRenderer/GatheringPathRenderer.json'
+          $json = Get-Content -Raw $path | ConvertFrom-Json
+          $json.AssemblyVersion = "${{ env.VER }}"
+          $json | ConvertTo-Json | Set-Content -Path $path
+      - name: Rename artifact to GatheringPathRenderer.zip
+        shell: pwsh
+        run: |
+          Copy-Item './GatheringPathRenderer/dist/GatheringPathRenderer/latest.zip' -Destination 'GatheringPathRenderer.zip'
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
@@ -49,4 +64,8 @@ jobs:
           files: |
             Questionable.zip
             Questionable/dist/Questionable/Questionable.json
+            GatheringPathRenderer.zip
+            GatheringPathRenderer/dist/GatheringPathRenderer/GatheringPathRenderer.json
           generate_release_notes: true
+
+# 2026-08-16: repo 重建後 workflow_dispatch-only workflow 未被 Actions 重新註冊,touch 本檔強制重掃

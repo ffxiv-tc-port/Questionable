@@ -58,14 +58,39 @@ internal sealed class CraftworksSupplyController : IDisposable
         }
     }
 
+    /// <remarks>
+    /// 🔴 <c>AtkUnitBase.AtkValues</c> 是指標欄位(addon 剛 setup／正在拆解時為 null),
+    /// 長度另存在 <c>AtkValuesCount</c>。原本 <c>atkValues[7]</c>／<c>atkValues[31 + slot]</c>
+    /// 兩者都沒驗:null 時從位址 <c>index * 0x10</c> 讀 ＝ AccessViolationException
+    /// (corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到);長度不足時讀到的是
+    /// 陣列後方的堆積垃圾,而 <c>missingCount = 6 - completedCount</c> 是 <c>uint</c> 減法 ——
+    /// <c>completedCount</c> 只要是垃圾大數,迴圈次數就會下溢成接近 42 億。
+    /// <para>失敗語意:安靜返回(＝這一次不動作)。這支由 addon 的 PostSetup 事件驅動,
+    /// 下一次刷新還會再進來,取得到時行為一字不改。</para>
+    /// </remarks>
     private unsafe void InteractWithBankaCraftworksSupply(AtkUnitBase* addon)
     {
+        if (addon == null || addon->AtkValues == null)
+        {
+            return;
+        }
+
         AtkValue* atkValues = addon->AtkValues;
+        int valueCount = addon->AtkValuesCount;
+        if (valueCount <= 31)
+        {
+            return;
+        }
 
         uint completedCount = atkValues[7].UInt;
         uint missingCount = 6 - completedCount;
         for(int slot = 0; slot < missingCount; ++slot)
         {
+            if (31 + slot >= valueCount)
+            {
+                break;
+            }
+
             if (atkValues[31 + slot].UInt != 0)
             {
                 continue;
@@ -109,7 +134,14 @@ internal sealed class CraftworksSupplyController : IDisposable
             return;
         }
 
-        AtkUnitBase* parentAddon = AtkStage.Instance()->RaptureAtkUnitManager->GetAddonById(parentId);
+        // 走同 repo 既有的守衛版 helper：RaptureAtkUnitManager 與回傳值都判空。
+        // GetAddonById 找不到對應的 addon 時回傳 null，直接解參考 NameString 會是攔不到的 AVE
+        AtkUnitBase* parentAddon = AddonUtils.GetAddonById(parentId);
+        if (parentAddon == null)
+        {
+            return;
+        }
+
         if (parentAddon->NameString is "BankaCraftworksSupply")
         {
             _logger.LogInformation("Picking item for {AddonName}", parentAddon->NameString);

@@ -16,6 +16,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using GatheringPathRenderer.Updater;
 using GatheringPathRenderer.Windows;
 using ECommons.ExcelServices;
 using Pictomancy;
@@ -36,6 +37,7 @@ public sealed class RendererPlugin : IDalamudPlugin
 
     private readonly EditorCommands _editorCommands;
     private readonly EditorWindow _editorWindow;
+    private readonly PathDownloader _pathDownloader;
 
     private readonly List<GatheringLocationContext> _gatheringLocations = [];
     private readonly Dictionary<uint, List<Vector3>> _gbrLocationData;
@@ -54,7 +56,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         _objectTable = objectTable;
         //_playerState = playerState;
         _pluginLog = pluginLog;
-        _gbrLocationData = LoadGBRPosData(_pluginInterface.AssemblyLocation.DirectoryName!);
+        _gbrLocationData = LoadGBRPosData();
         pluginLog.Info($"Loaded {_gbrLocationData.Count} entries from GBR data");
         ECommonsMain.Init(pluginInterface, this);
 
@@ -67,7 +69,12 @@ public sealed class RendererPlugin : IDalamudPlugin
 
         _editorCommands = new EditorCommands(this, dataManager, commandManager, targetManager, clientState,
             objectTable, chatGui, pluginLog, configuration);
-        var configWindow = new ConfigWindow(pluginInterface, configuration);
+
+        // 🔴 Release 版的 PathsDirectory 只是個空目錄，路徑 json 不隨外掛出貨 ——
+        //    使用者要靠設定視窗那顆按鈕自己下載，否則疊加層永遠是空的（而且不報錯）。
+        _pathDownloader = new PathDownloader(this, pluginLog, framework);
+
+        var configWindow = new ConfigWindow(pluginInterface, configuration, _pathDownloader, this);
         _editorWindow = new EditorWindow(this, _editorCommands, dataManager, commandManager, targetManager, clientState, objectTable,
                 configWindow)
         { IsOpen = true };
@@ -85,7 +92,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         _pluginInterface.GetIpcSubscriber<object>("Questionable.ReloadData")
             .Subscribe(Reload);
 
-        PctService.Initialize(pluginInterface);
+        PictoService.Initialize(pluginInterface);
         LoadGatheringLocationsFromDirectory();
 
         _pluginInterface.UiBuilder.Draw += _windowSystem.Draw;
@@ -261,10 +268,20 @@ public sealed class RendererPlugin : IDalamudPlugin
             root));
     }
 
-    public static Dictionary<uint, List<Vector3>> LoadGBRPosData(string directoryName)
+    public static Dictionary<uint, List<Vector3>> LoadGBRPosData()
     {
-        var path = Path.Combine(directoryName, "world_locations.json");
-        using FileStream stream = new(path, FileMode.Open, FileAccess.Read);
+        // 🔴 不要改回 CopyToOutputDirectory 讀檔案：Dalamud.NET.Sdk 把
+        // EnableDefaultNoneItems 設成 false（沙盒式 SDK 的預設，避免亂七八糟的檔案被
+        // 順手複製進外掛輸出），所以 <None Update="..."> 這個寫法在沒有對應的
+        // <None Include> 時是對一個不存在的 item 做 no-op —— 檔案完全不會出現在
+        // dist/ 或已封裝的 zip 裡,建構子在 Release 一啟動就 FileNotFoundException,
+        // 外掛 100% 讀不起來(2026-08-07 實測:直接檢查封裝出的 zip 內容驗證)。
+        // 上游已經在較新版本改成內嵌資源(EmbeddedResource + LogicalName)修掉這個問題
+        // ——這裡照抄上游修法,不要自創。
+        using Stream stream = typeof(RendererPlugin).Assembly.GetManifestResourceStream(
+                                   "GatheringPathRenderer.GBRWorldLocations")
+                               ?? throw new InvalidOperationException(
+                                   "world_locations.json was not found as an embedded resource");
         var root = JsonNode.Parse(stream);
         var result = new Dictionary<uint, List<Vector3>>();
 
@@ -354,7 +371,7 @@ public sealed class RendererPlugin : IDalamudPlugin
         if (!ExcelJobHelper.IsDol(_currentClassJob))
             return;
 
-        using var drawList = PctService.Draw();
+        using var drawList = PictoService.Draw();
         if (drawList == null)
             return;
 
@@ -453,11 +470,12 @@ public sealed class RendererPlugin : IDalamudPlugin
         _pluginInterface.UiBuilder.Draw -= Draw;
         _pluginInterface.UiBuilder.Draw -= _windowSystem.Draw;
 
-        PctService.Dispose();
+        PictoService.Dispose();
 
         _pluginInterface.GetIpcSubscriber<object>("Questionable.ReloadData")
             .Unsubscribe(Reload);
 
+        _pathDownloader.Dispose();
         _editorCommands.Dispose();
     }
 

@@ -268,20 +268,28 @@ internal sealed partial class ActiveQuestComponent
                 }
 
 
-                List<PriorityQuestInfo> priorityQuests = _questFunctions.GetNextPriorityQuestsThatCanBeAccepted();
-                List<ElementId> availablePriorityQuests = priorityQuests
-                    .Where(x => x.IsAvailable)
-                    .Select(x => x.QuestId)
-                    .ToList();
-                List<PriorityQuestInfo> unavailablePriorityQuests = priorityQuests
-                    .Where(x => !x.IsAvailable)
-                    .ToList();
-                if (availablePriorityQuests.Count > 0 || unavailablePriorityQuests.Count > 0)
+                List<PriorityQuestInfo> priorityQuests = _questFunctions.NextPriorityQuestsThatCanBeAccepted;
+                bool anyAvailable = false;
+                bool anyUnavailable = false;
+                foreach (var p in priorityQuests)
+                {
+                    if (p.IsAvailable) anyAvailable = true;
+                    else anyUnavailable = true;
+                    if (anyAvailable && anyUnavailable) break;
+                }
+                if (anyAvailable || anyUnavailable)
                 {
                     ImGui.SameLine();
                     ImGui.TextColored(ImGuiColors.DalamudYellow, SeIconChar.Hyadelyn.ToIconString());
                     if (ImGui.IsItemHovered())
                     {
+                        List<ElementId> availablePriorityQuests = priorityQuests
+                            .Where(x => x.IsAvailable)
+                            .Select(x => x.QuestId)
+                            .ToList();
+                        List<PriorityQuestInfo> unavailablePriorityQuests = priorityQuests
+                            .Where(x => !x.IsAvailable)
+                            .ToList();
                         using var tooltip = ImRaii.Tooltip();
                         ImGui.Text(
                             "Certain priority quest (e.g. class quests) may be started/completed by\nthe plugin prior to continuing, usually at a teleport step.".Loc());

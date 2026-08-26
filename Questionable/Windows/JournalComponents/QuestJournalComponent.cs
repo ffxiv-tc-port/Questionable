@@ -254,7 +254,7 @@ internal sealed class QuestJournalComponent
 
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + spacing);
         string defaultReason;
-        string reason = defaultReason = "<no reason specified>";
+        string reason = defaultReason = "<no reason specified>".Loc();
         if (quest != null)
         {
             reason = (quest.Root.Comment ?? defaultReason).Split('\n', 2)[0];
@@ -488,6 +488,11 @@ internal sealed class QuestJournalComponent
             return false;
         }
 
+        if (filter.HideCompleted && _questFunctions.IsQuestComplete(questInfo.QuestId))
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -509,16 +514,18 @@ internal sealed class QuestJournalComponent
     {
         public bool AvailableOnly;
         public bool HideNoPaths;
+        public bool HideCompleted;
         public string SearchText = string.Empty;
 
-        public bool AdvancedFiltersActive => AvailableOnly || HideNoPaths;
+        public bool AdvancedFiltersActive => AvailableOnly || HideNoPaths || HideCompleted;
 
         public FilterConfiguration WithoutName()
         {
             return new()
             {
                 AvailableOnly = AvailableOnly,
-                HideNoPaths = HideNoPaths
+                HideNoPaths = HideNoPaths,
+                HideCompleted = HideCompleted
             };
         }
     }

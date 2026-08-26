@@ -125,7 +125,16 @@ internal static class SinglePlayerDuty
 
         private unsafe bool DutyActionsAvailable()
         {
-            return RaptureHotbarModule.Instance()->DutyActionsPresent;
+            // 🔴 RaptureHotbarModule.Instance() 是手寫包裝，UIModule 還沒建好時合法回 null
+            //    （Dalamud lib/FFXIVClientStructs/.../Client/UI/Misc/RaptureHotbarModule.cs:15-18）。
+            //    原本 ->DutyActionsPresent 對 null 裸解參考＝AccessViolationException，
+            //    在 .NET Core 是 corrupted-state exception，try/catch 攔不到。
+            // fail-closed：回 false＝「任務技能還沒出現」。唯一呼叫點是上面 WaitCondition.Task("Wait(Phase 2)")
+            //    的輪詢述詞，回 false 就是「繼續等」——正好是安全的退化行為；回 true 會讓流程誤判階段已推進
+            //    而提早 EnableAi(true)。
+            // 這是輪詢述詞（每次條件檢查都會呼叫），刻意不寫 log。
+            RaptureHotbarModule* hotbarModule = RaptureHotbarModule.Instance();
+            return hotbarModule != null && hotbarModule->DutyActionsPresent;
         }
     }
 

@@ -31,12 +31,37 @@ internal readonly struct ShopItemInfo
 
 internal static class ShopAddonReader
 {
+    /// <remarks>
+    /// 🔴 原本三個索引(<c>[2]</c>／<c>[441 + i]</c>／<c>[75 + i]</c>)全部裸讀:
+    /// <c>AtkUnitBase.AtkValues</c> 是指標欄位,addon 剛 setup／正在拆解時是 null,
+    /// 長度另存在 <c>AtkValuesCount</c>。裸讀 null ＝從位址 <c>index * 0x10</c> 讀,
+    /// 長度不足 ＝讀陣列後方的堆積垃圾。前者是 AccessViolationException(corrupted-state
+    /// exception,<c>try</c>/<c>catch</c> 攔不到),後者更糟 —— 垃圾會變成
+    /// <see cref="ShopItemInfo.ItemId"/> 被拿去<b>買東西</b>。
+    /// <para>而且 <c>numEntries</c> 自己就是從同一個未驗證的陣列讀出來的,
+    /// 它是垃圾時迴圈次數也跟著是垃圾 ⇒ 上界必須另外夾。</para>
+    /// <para>失敗語意:回空陣列。兩個呼叫端本來就有
+    /// <c>shopItems.Length == 0</c>／<c>Position &lt; shopItems.Length</c> 的路徑,
+    /// 所以讀得到時行為一字不改,讀不到時是「這一幀沒有商品」而不是誤買。</para>
+    /// </remarks>
     public static unsafe ShopItemInfo[] ReadShopItems(AtkUnitBase* addon)
     {
         List<ShopItemInfo> items = [];
-        uint numEntries = addon->AtkValues[2].UInt;
+        if (addon == null || addon->AtkValues == null)
+        {
+            return [];
+        }
+
+        int valueCount = addon->AtkValuesCount;
+        uint numEntries = AtkValueAdapter.ReadUInt(addon, 2);
         for(int i = 0; i < numEntries; ++i)
         {
+            // 兩條索引都要在界內才算數:少驗一條就等於沒驗。
+            if (441 + i >= valueCount || 75 + i >= valueCount)
+            {
+                break;
+            }
+
             uint itemId = addon->AtkValues[441 + i].UInt;
             if (itemId == 0)
             {

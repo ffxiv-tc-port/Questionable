@@ -178,7 +178,18 @@ internal sealed unsafe class GameFunctions
 
     public bool UseItem(uint itemId)
     {
-        long result = AgentInventoryContext.Instance()->UseItem(itemId);
+        // AgentInventoryContext.Instance() 走 [Agent] 產生器，本體即
+        // 「agentModule == null ? null : GetAgentByInternalId(...)」，兩層都能合法回 null，
+        // 裸接 ->UseItem() 等於從位址 0 讀 vtable，是攔不到的 AccessViolation。
+        // fail-closed：取不到就回 false＝「沒用成道具」，與呼叫端既有的失敗處理一致（會重試）。
+        AgentInventoryContext* agentInventoryContext = AgentInventoryContext.Instance();
+        if (agentInventoryContext == null)
+        {
+            _logger.LogWarning("Inventory context agent is unavailable, not using item {ItemId}", itemId);
+            return false;
+        }
+
+        long result = agentInventoryContext->UseItem(itemId);
         _logger.LogInformation("UseItem result: {Result}", result);
 
         return result == 0;
@@ -190,7 +201,17 @@ internal sealed unsafe class GameFunctions
         if (gameObject != null)
         {
             _targetManager.Target = gameObject;
-            long result = AgentInventoryContext.Instance()->UseItem(itemId);
+            // 同上：兩層都能合法回 null，裸解參考是攔不到的 AccessViolation。
+            // fail-closed：取不到就回 false＝「沒用成道具」，呼叫端會重試。
+            AgentInventoryContext* agentInventoryContext = AgentInventoryContext.Instance();
+            if (agentInventoryContext == null)
+            {
+                _logger.LogWarning("Inventory context agent is unavailable, not using item {ItemId} on {DataId}",
+                    itemId, dataId);
+                return false;
+            }
+
+            long result = agentInventoryContext->UseItem(itemId);
 
             _logger.LogInformation("UseItem result on {DataId}: {Result}", dataId, result);
             return result is 0 or 1;
@@ -428,7 +449,21 @@ internal sealed unsafe class GameFunctions
         {
             if (UIState.IsInstanceContentUnlocked(contentId))
             {
-                AgentContentsFinder.Instance()->OpenRegularDuty(contentFinderConditionId);
+                // AgentContentsFinder.Instance() 走 [Agent] 產生器，合法回 null，
+                // 裸解參考是攔不到的 AccessViolation。
+                // fail-closed：取不到就不開任務搜尋器，只記錄——與這個方法既有的
+                // 兩個「開不了」分支同一種處理方式。
+                AgentContentsFinder* agentContentsFinder = AgentContentsFinder.Instance();
+                if (agentContentsFinder != null)
+                {
+                    agentContentsFinder->OpenRegularDuty(contentFinderConditionId);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Contents finder agent is unavailable, not opening duty (cf: {ContentFinderId})",
+                        contentFinderConditionId);
+                }
             }
             else
             {
@@ -476,7 +511,12 @@ internal sealed unsafe class GameFunctions
 
         if (_condition[ConditionFlag.Crafting])
         {
-            if (!AgentRecipeNote.Instance()->IsAgentActive())
+            // AgentRecipeNote.Instance() 走 [Agent] 產生器，合法回 null，
+            // 裸接 ->IsAgentActive() 是攔不到的 AccessViolation。
+            // fail-closed：null 與「代理人未啟用」走同一條路＝回 true（視為忙碌），
+            // 讓流程等下一輪，而不是在讀不到狀態時往前推進。
+            AgentRecipeNote* agentRecipeNote = AgentRecipeNote.Instance();
+            if (agentRecipeNote == null || !agentRecipeNote->IsAgentActive())
             {
                 return true;
             }
@@ -517,7 +557,12 @@ internal sealed unsafe class GameFunctions
             return false;
         }
 
-        if (!AgentSatisfactionSupply.Instance()->IsAgentActive())
+        // AgentSatisfactionSupply.Instance() 走 [Agent] 產生器，合法回 null，
+        // 裸接 ->IsAgentActive() 是攔不到的 AccessViolation。
+        // null 時的退化與「代理人未啟用」完全相同＝回 false（沒在跟外送 NPC 對話），
+        // 而且那也確實是正確答案：agent 都還沒建立，就不可能正在對話。
+        AgentSatisfactionSupply* agentSatisfactionSupply = AgentSatisfactionSupply.Instance();
+        if (agentSatisfactionSupply == null || !agentSatisfactionSupply->IsAgentActive())
         {
             return false;
         }

@@ -42,6 +42,7 @@ internal sealed class PandorasBoxIpc : IDisposable
 
     private bool _loggedIpcError;
     private HashSet<string>? _pausedFeatures;
+    private DateTime _nextPandoraRetryAt = DateTime.MinValue;
 
     public PandorasBoxIpc(IDalamudPluginInterface pluginInterface,
         IFramework framework,
@@ -71,12 +72,18 @@ internal sealed class PandorasBoxIpc : IDisposable
             {
                 return _getFeatureEnabled.InvokeFunc("Auto Active Time Maneuver") == true;
             }
+            catch(IpcNotReadyError)
+            {
+                // 同 DisableConflictingFeatures():IPC 還沒註冊時安靜跳過,
+                // 保留 _loggedIpcError 給真正的錯誤用。
+                return false;
+            }
             catch(IpcError e)
             {
                 if (!_loggedIpcError)
                 {
                     _loggedIpcError = true;
-                    _logger.LogWarning(e, "Could not query pandora's box for feature status, probably not installed");
+                    _logger.LogDebug(e, "Pandora's Box IPC is unavailable; the optional integration will be skipped");
                 }
 
                 return false;
@@ -106,7 +113,7 @@ internal sealed class PandorasBoxIpc : IDisposable
 
     private void DisableConflictingFeatures()
     {
-        if (_pausedFeatures != null)
+        if (_pausedFeatures != null || DateTime.UtcNow < _nextPandoraRetryAt)
         {
             return;
         }
@@ -124,6 +131,21 @@ internal sealed class PandorasBoxIpc : IDisposable
                     _pausedFeatures.Add(feature);
                     _logger.LogInformation("Paused Pandora's Box feature: {Feature}", feature);
                 }
+            }
+            catch(IpcNotReadyError)
+            {
+                // Pandora's Box 是選配整合且非同步初始化 IPC。
+                // 不要每個 feature 各印一次警告；短暫延遲後重試，
+                // 讓還在啟動中的提供者之後仍能被安全偵測到。
+                _pausedFeatures = null;
+                _nextPandoraRetryAt = DateTime.UtcNow.AddSeconds(1);
+                if (!_loggedIpcError)
+                {
+                    _loggedIpcError = true;
+                    _logger.LogDebug("Pandora's Box IPC is not registered; retrying the optional integration later");
+                }
+
+                return;
             }
             catch(IpcError e)
             {
@@ -153,5 +175,6 @@ internal sealed class PandorasBoxIpc : IDisposable
         }
 
         _pausedFeatures = null;
+        _nextPandoraRetryAt = DateTime.MinValue;
     }
 }

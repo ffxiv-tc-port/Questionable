@@ -47,6 +47,12 @@
               "Type": "YesNo",
               "Prompt": 268,
               "Yes": true
+            },
+            {
+              "Type": "List",
+              "ExcelSheet": "ContentTalk",
+              "Prompt": 264,
+              "Answer": 267
             }
           ]
         }

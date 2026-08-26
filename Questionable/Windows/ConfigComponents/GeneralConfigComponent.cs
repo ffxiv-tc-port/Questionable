@@ -32,6 +32,16 @@ internal sealed class GeneralConfigComponent : ConfigComponent
     private readonly string[] _grandCompanyNames =
         ["None (manually pick quest)".Loc(), "Maelstrom".Loc(), "Twin Adder".Loc(), "Immortal Flames".Loc()];
 
+    private static readonly Dictionary<Configuration.ECombatModule, string> CombatModuleNames = new()
+    {
+        [Configuration.ECombatModule.None] = "None".Loc(),
+    };
+
+    private static readonly Dictionary<Configuration.EGearsetUpdateSource, string> GearsetUpdateSourceNames = new()
+    {
+        [Configuration.EGearsetUpdateSource.Vanilla] = "Vanilla".Loc(),
+    };
+
     private readonly uint[] _mountIds;
     private readonly string[] _mountNames;
 
@@ -96,7 +106,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
 
 
         Configuration.ECombatModule combatModule = Configuration.General.CombatModule;
-        if (ImGuiEx.EnumCombo("Preferred Combat Module".Loc(), ref combatModule))
+        if (ImGuiEx.EnumCombo("Preferred Combat Module".Loc(), ref combatModule, names: CombatModuleNames))
         {
             Configuration.General.CombatModule = combatModule;
             Save();
@@ -172,7 +182,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
         }
 
         Configuration.EGearsetUpdateSource gearsetSource = Configuration.General.GearsetUpdateSource;
-        if (ImGuiEx.EnumCombo("Preferred Gear Upgrade Source".Loc(), ref gearsetSource))
+        if (ImGuiEx.EnumCombo("Preferred Gear Upgrade Source".Loc(), ref gearsetSource, names: GearsetUpdateSourceNames))
         {
             Configuration.General.GearsetUpdateSource = gearsetSource;
             Save();

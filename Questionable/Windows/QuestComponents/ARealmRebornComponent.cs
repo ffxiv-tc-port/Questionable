@@ -2,6 +2,7 @@
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Common.Math;
 using Questionable.Data;
@@ -45,7 +46,7 @@ internal sealed class ARealmRebornComponent
     private void DrawPrimals()
     {
         bool complete = UIState.IsInstanceContentCompleted(RequiredPrimalInstances.Last());
-        bool hover = _uiUtils.ChecklistItem("Hard Mode Primals", complete,
+        bool hover = _uiUtils.ChecklistItem("Hard Mode Primals".Loc(), complete,
             _configuration.Advanced.SkipARealmRebornHardModePrimals ? ImGuiColors.DalamudGrey : null);
         if (complete || !hover)
         {
@@ -63,7 +64,7 @@ internal sealed class ARealmRebornComponent
     private void DrawAllianceRaids()
     {
         bool complete = _questFunctions.IsQuestComplete(QuestData.CrystalTowerQuests[^1]);
-        bool hover = _uiUtils.ChecklistItem("Crystal Tower Raids", complete,
+        bool hover = _uiUtils.ChecklistItem("Crystal Tower Raids".Loc(), complete,
             _configuration.Advanced.SkipCrystalTowerRaids ? ImGuiColors.DalamudGrey : null);
         if (complete || !hover)
         {

@@ -51,12 +51,15 @@ internal sealed class TerritoryData
             .Select(x => new ContentFinderConditionData(x, dataManager.Language))
             .ToImmutableDictionary(x => x.ContentFinderConditionId, x => x);
 
+        // 查不到對應列的任務戰鬥直接略過(而不是讓建構式擲例外),詳見
+        // LookupContentFinderConditionForQuestBattle 的說明。
         _questBattlesToContentFinderCondition = dataManager.GetExcelSheet<Quest>()
             .Where(x => x is { RowId: > 0, IssuerLocation.RowId: > 0 })
             .SelectMany(GetQuestBattles)
             .Select(x => (x.QuestId, x.Index,
                 CfcId: LookupContentFinderConditionForQuestBattle(dataManager, x.QuestBattleId)))
-            .ToImmutableDictionary(x => (x.QuestId, x.Index), x => x.CfcId);
+            .Where(x => x.CfcId != null)
+            .ToImmutableDictionary(x => (x.QuestId, x.Index), x => x.CfcId!.Value);
     }
 
     public string? GetName(uint territoryId)
@@ -122,9 +125,19 @@ internal sealed class TerritoryData
         }
     }
 
+    /// <remarks>
+    /// ⚠️ 原本這裡用 <c>_contentFinderConditions[x.Value]</c> 直接索引,對不在字典裡的 cfcId 會擲
+    /// <see cref="KeyNotFoundException"/>。<see cref="TryGetContentFinderConditionForSoloInstance"/> 對同樣的
+    /// 情況早就是回 <c>false</c>(走 <c>TryGetValue</c>),所以這裡改成略過才是兩邊一致的行為。
+    /// 📌 2026-08-15 離線核對台服 7.20:277 筆全部命中,目前不會少列。
+    /// </remarks>
     public IEnumerable<(ElementId QuestId, byte Index, ContentFinderConditionData Data)> GetAllQuestsWithQuestBattles()
     {
-        return _questBattlesToContentFinderCondition.Select(x => (x.Key.QuestId, x.Key.Index, _contentFinderConditions[x.Value]));
+        foreach((var key, uint cfcId) in _questBattlesToContentFinderCondition)
+        {
+            if (_contentFinderConditions.TryGetValue(cfcId, out ContentFinderConditionData? data))
+                yield return (key.QuestId, key.Index, data);
+        }
     }
 
     private static string FixName(string name, ClientLanguage language)
@@ -156,15 +169,31 @@ internal sealed class TerritoryData
         }
     }
 
-    private static uint LookupContentFinderConditionForQuestBattle(IDataManager dataManager, uint questBattleId)
+    /// <summary>
+    /// 由任務戰鬥 id 反查對應的 ContentFinderCondition id。查不到時回 <c>null</c>。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 這是建構式路徑,擲例外＝<see cref="TerritoryData"/> 這個 DI 單例建不起來＝整個外掛載入失敗,
+    /// 不是「某個任務不能跑」而已。
+    /// <br/><br/>
+    /// id 來自 <c>Quest</c> 表的 <c>QuestParams[].ScriptArg</c>,那是原始 uint 而不是 Lumina 的 RowRef,
+    /// 遊戲資料本身不保證它指得到列。而台服 7.20 的 <c>InstanceContent</c> 是<b>稀疏表</b>
+    /// (719 列散布在 0..65002),<c>GetRow</c> 撲空就擲 <see cref="ArgumentOutOfRangeException"/>。
+    /// <br/><br/>
+    /// 📌 2026-08-15 離線核對台服 7.20 EXD:277 筆 QUESTBATTLE 參數<b>全部命中</b>
+    /// (82 筆走 InstanceContent、195 筆走 QuestBattleResident),所以目前不會觸發 ——
+    /// 這是預防「台服改版新增任務戰鬥但本地 sheet 還沒跟上」的那一刻,不是在修現有故障。
+    /// </remarks>
+    private static uint? LookupContentFinderConditionForQuestBattle(IDataManager dataManager, uint questBattleId)
     {
         if (questBattleId >= 5000)
         {
-            return dataManager.GetExcelSheet<InstanceContent>().GetRow(questBattleId).ContentFinderCondition.RowId;
+            return dataManager.GetExcelSheet<InstanceContent>().GetRowOrDefault(questBattleId)
+                ?.ContentFinderCondition.RowId;
         }
         else
         {
-            return dataManager.GetExcelSheet<QuestBattleResident>().GetRow(questBattleId).Unknown0;
+            return dataManager.GetExcelSheet<QuestBattleResident>().GetRowOrDefault(questBattleId)?.Unknown0;
         }
     }
 

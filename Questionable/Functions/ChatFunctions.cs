@@ -53,7 +53,29 @@ internal sealed unsafe class ChatFunctions
     /// <exception cref="InvalidOperationException">If the signature for this function could not be found</exception>
     private void SendMessageUnsafe(byte[] message)
     {
-        nint uiModule = (nint)Framework.Instance()->GetUIModule();
+        // Framework.Instance() 宣告成 [StaticAddress("48 8B 1D ...", 3, isPointer: true)]：產生器讀的是
+        // 「指標的位址」再多解參考一層，所以它真的會回 null(登入前、登出後、關閉中都是常態)；
+        // 只有特徵碼失配時才改成擲例外。不帶 isPointer 的那種才是「null 就擲、否則保證非 null」，
+        // 光看 attribute 名稱分不出來，必須看有沒有 isPointer。
+        // GetUIModule() 是 [MemberFunction] 原生呼叫：對 null 的 this 呼叫會在遊戲碼裡解參考，
+        // 得到 AccessViolationException —— 在 .NET Core 屬 corrupted-state exception，
+        // try/catch 完全攔不到 ⇒ 只能事前判空。就算僥倖回來，_processChatBox 也會拿著假的
+        // uiModule 再崩一次。
+        // 本方法的 XML 文件既有慣例就是前提不成立時擲 InvalidOperationException，這裡沿用：
+        // 訊息不送出，呼叫端拿到的是可攔截的受管理例外，而不是整個遊戲閃退。
+        var framework = Framework.Instance();
+        if (framework == null)
+        {
+            throw new InvalidOperationException("Framework is not available; chat message was not sent.");
+        }
+
+        var uiModulePtr = framework->GetUIModule();
+        if (uiModulePtr == null)
+        {
+            throw new InvalidOperationException("UIModule is not available; chat message was not sent.");
+        }
+
+        nint uiModule = (nint)uiModulePtr;
 
         using ChatPayload payload = new(message);
         nint mem1 = Marshal.AllocHGlobal(400);

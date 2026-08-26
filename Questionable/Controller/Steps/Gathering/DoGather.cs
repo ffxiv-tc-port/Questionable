@@ -99,9 +99,15 @@ internal static class DoGather
                         }
                         else
                         {
+                            // 🔴 AtkValues 是指標欄位(addon 剛 setup／正在拆解時為 null),
+                            // 長度另存在 AtkValuesCount。裸讀 [109]/[110] 在 null 時是
+                            // AccessViolationException(corrupted-state exception,try/catch 攔不到),
+                            // 長度不足時讀的是陣列後方的堆積垃圾 —— 而這兩個值是「完整度」,
+                            // 垃圾值會讓 GetNextActions 依它挑技能。讀不到就當作 0/0
+                            // (與 GatheringMasterpiece 那邊「讀不到 ⇒ 不進場」同語意)。
                             NodeCondition nodeCondition = new(
-                                addonGathering->AtkValues[109].UInt,
-                                addonGathering->AtkValues[110].UInt);
+                                ECommons.GenericHelpers.GetAtkValueUInt(&addonGathering->AtkUnitBase, 109),
+                                ECommons.GenericHelpers.GetAtkValueUInt(&addonGathering->AtkUnitBase, 110));
                             logger.LogDebug($"NodeCondition: {nodeCondition.CurrentIntegrity}/{nodeCondition.MaxIntegrity}");
 
                             if (_actionQueue != null && _actionQueue.TryPeek(out EAction nextAction))
@@ -153,6 +159,13 @@ internal static class DoGather
                 : ETaskResult.StillRunning;
         }
 
+        /// <summary>
+        /// SearchNodeById 找不到 id 時回 null，找到的節點型別不是文字節點時
+        /// GetAsAtkTextNode() 也回 null。兩層一起擋掉。
+        /// </summary>
+        private static unsafe AtkTextNode* AsTextNode(AtkResNode* node)
+            => node == null ? null : node->GetAsAtkTextNode();
+
         private unsafe List<SlotInfo> ReadSlots(AddonGathering* addonGathering)
         {
             List<SlotInfo> slots = [];
@@ -167,23 +180,47 @@ internal static class DoGather
 
                 AtkComponentCheckBox* atkCheckbox = addonGathering->GatheredItemComponentCheckbox[i].Value;
 
-                AtkTextNode* atkGatheringChance = atkCheckbox->UldManager.SearchNodeById(10)->GetAsAtkTextNode();
-                if (!int.TryParse(atkGatheringChance->NodeText.ToString(), out int gatheringChance))
-                {
-                    gatheringChance = 0;
-                }
+                // 🔴 這條鏈上每一跳都合法回 null：向量元素本身、SearchNodeById 找不到 id、
+                // 以及節點型別不符時的 GetAsAtkTextNode()／GetAsAtkComponentNode()。
+                // 原本一跳都沒判，任一跳為 null 就是往位址 0 附近讀 NodeText＝AccessViolation
+                //（corrupted-state exception，try/catch 攔不到）。
+                //
+                // 🔴 失敗語意刻意選「保留 slot，欄位退回預設值」而不是 continue 丟掉整個 slot：
+                // itemId 是從 addonGathering->ItemIds[i] 讀到的，這一格確實有東西；
+                // 而 GetNextActions 對備選道具用的是 slots.Single(...)，少一個 slot 會直接擲例外。
+                // 預設值就是原本「TryParse 失敗」時已經在用的那組（0／0／1），語意不變。
+                // 這是每影格讀採集面板的路徑，不寫 log。
+                int gatheringChance = 0;
+                int boonChance = 0;
+                int quantity = 1;
 
-                AtkTextNode* atkBoonChance = atkCheckbox->UldManager.SearchNodeById(16)->GetAsAtkTextNode();
-                if (!int.TryParse(atkBoonChance->NodeText.ToString(), out int boonChance))
+                if (atkCheckbox != null)
                 {
-                    boonChance = 0;
-                }
+                    AtkTextNode* atkGatheringChance = AsTextNode(atkCheckbox->UldManager.SearchNodeById(10));
+                    if (atkGatheringChance != null &&
+                        int.TryParse(atkGatheringChance->NodeText.ToString(), out int parsedGatheringChance))
+                    {
+                        gatheringChance = parsedGatheringChance;
+                    }
 
-                AtkComponentNode* atkImage = atkCheckbox->UldManager.SearchNodeById(31)->GetAsAtkComponentNode();
-                AtkTextNode* atkQuantity = atkImage->Component->UldManager.SearchNodeById(7)->GetAsAtkTextNode();
-                if (!atkQuantity->IsVisible() || !int.TryParse(atkQuantity->NodeText.ToString(), out int quantity))
-                {
-                    quantity = 1;
+                    AtkTextNode* atkBoonChance = AsTextNode(atkCheckbox->UldManager.SearchNodeById(16));
+                    if (atkBoonChance != null &&
+                        int.TryParse(atkBoonChance->NodeText.ToString(), out int parsedBoonChance))
+                    {
+                        boonChance = parsedBoonChance;
+                    }
+
+                    AtkResNode* imageResNode = atkCheckbox->UldManager.SearchNodeById(31);
+                    AtkComponentNode* atkImage = imageResNode == null ? null : imageResNode->GetAsAtkComponentNode();
+                    if (atkImage != null && atkImage->Component != null)
+                    {
+                        AtkTextNode* atkQuantity = AsTextNode(atkImage->Component->UldManager.SearchNodeById(7));
+                        if (atkQuantity != null && atkQuantity->IsVisible() &&
+                            int.TryParse(atkQuantity->NodeText.ToString(), out int parsedQuantity))
+                        {
+                            quantity = parsedQuantity;
+                        }
+                    }
                 }
 
                 SlotInfo slot = new(i, itemId, gatheringChance, boonChance, quantity);
