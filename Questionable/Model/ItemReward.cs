@@ -31,20 +31,19 @@ public abstract record ItemReward(ItemRewardDetails Item)
     public abstract EItemRewardType Type { get; }
     internal static ItemReward? CreateFromItem(Item item, ElementId elementId)
     {
-        if (item.ItemAction.Value is { } itemAction &&
-            itemAction.Action.Value is { } action)
+        if (item.ItemAction.Value is { } itemAction)
         {
-            if (action.RowId is 1322)
+            if (itemAction.Type is 1322)
             {
                 return new MountReward(new(item, elementId), item.ItemAction.Value.Data[0]);
             }
 
-            if (action.RowId is 853)
+            if (itemAction.Type is 853)
             {
                 return new MinionReward(new(item, elementId), item.ItemAction.Value.Data[0]);
             }
 
-            if (action.RowId is 20086)
+            if (itemAction.Type is 20086)
             {
                 return new FashionAccessoryReward(new(item, elementId), item.ItemAction.Value.Data[0]);
             }

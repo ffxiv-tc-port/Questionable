@@ -1,8 +1,9 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Questionable.Controller;
 using Questionable.Data;
@@ -40,14 +41,14 @@ internal sealed class AlliedSocietyJournalComponent
 
     public void DrawAlliedSocietyQuests()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Allied Societies");
+        using var tab = ImRaii.TabItem("Allied Societies".Loc());
         if (!tab)
         {
             return;
         }
         bool addPending = false;
 #if DEBUG
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Plus, "Add"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Plus, "Add".Loc()))
         {
             addPending = true;
         }
@@ -57,7 +58,7 @@ internal sealed class AlliedSocietyJournalComponent
         unsafe
         {
             uint allowances = QuestManager.Instance()->GetBeastTribeAllowance();
-            ImGui.Text($"Remaining: {allowances}/12");
+            ImGui.Text($"{"Remaining".Loc()}: {allowances}/12");
         }
 
         foreach(EAlliedSociety alliedSociety in Enum.GetValues<EAlliedSociety>().Where(x => x != EAlliedSociety.None))
@@ -120,7 +121,7 @@ internal sealed class AlliedSocietyJournalComponent
                         continue;
                     }
 
-                    ImGui.Text(RankNames[i - 1]);
+                    ImGui.Text(RankNames[i - 1].Loc());
                     _questJournalUtils.ShowQuestGroupContextMenu($"DrawAlliedSocietyQuests{alliedSociety}/{RankNames[i - 1]}", questsByRank);
                     foreach(IQuestInfo quest in questsByRank)
                     {

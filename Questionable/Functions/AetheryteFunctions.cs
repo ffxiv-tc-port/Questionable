@@ -99,7 +99,7 @@ internal sealed unsafe class AetheryteFunctions
         PlayerState* playerState = PlayerState.Instance();
         return playerState != null &&
                (playerState->FreeAetheryteId == (uint)aetheryteLocation ||
-                playerState->FreeAetherytePSPlus == (uint)aetheryteLocation);
+                playerState->FreeAetherytePlayStationPlus == (uint)aetheryteLocation);
     }
 
     public AetheryteRegistrationResult CanRegisterFreeOrFavoriteAetheryte(EAetheryteLocation aetheryteLocation)

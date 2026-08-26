@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Functions;
 using Questionable.Model;
@@ -40,7 +41,7 @@ internal sealed class PriorityWindow : LWindow
     public PriorityWindow(QuestController questController, QuestFunctions questFunctions, QuestSelector questSelector,
         QuestTooltipComponent questTooltipComponent, UiUtils uiUtils, IChatGui chatGui, QuestRegistry questRegistry,
         IDalamudPluginInterface pluginInterface)
-        : base("Quest Priority###QuestionableQuestPriority")
+        : base("Quest Priority".Loc() + "###QuestionableQuestPriority")
     {
         _questController = questController;
         _questFunctions = questFunctions;
@@ -69,38 +70,38 @@ internal sealed class PriorityWindow : LWindow
 
     public override void DrawContent()
     {
-        if (ImGui.CollapsingHeader("Explanation"))
+        if (ImGui.CollapsingHeader("Explanation".Loc()))
         {
             ImGui.TextWrapped(
-                "Questionable will generally try to do:");
-            ImGui.BulletText("Priority quests added below, in order");
-            ImGui.BulletText("'Priority' quests: class quests, ARR primals, ARR raids");
+                "Questionable will generally try to do:".Loc());
+            ImGui.BulletText("Priority quests added below, in order".Loc());
+            ImGui.BulletText("'Priority' quests: class quests, ARR primals, ARR raids".Loc());
             ImGui.BulletText(
-                "Supported quests in your 'To-Do list'\n(quests from your Quest Journal that are always on-screen)");
-            ImGui.BulletText("MSQ quest (if available, unless it is marked as 'ignored'\nin your Journal)");
+                "Supported quests in your 'To-Do list'\n(quests from your Quest Journal that are always on-screen)".Loc());
+            ImGui.BulletText("MSQ quest (if available, unless it is marked as 'ignored'\nin your Journal)".Loc());
             ImGui.TextWrapped(
-                "If you don't have any active MSQ quest and there is no Priority Quest added here, it will always try to pick up the next quest in the MSQ first.");
+                "If you don't have any active MSQ quest and there is no Priority Quest added here, it will always try to pick up the next quest in the MSQ first.".Loc());
         }
         ImGui.Separator();
         ImGui.Spacing();
-        ImGui.Text("Quests to do first:");
+        ImGui.Text("Quests to do first:".Loc());
         _questSelector.DrawSelection();
         DrawQuestList();
 
         List<ElementId> clipboardItems = ParseClipboardItems();
         ImGui.BeginDisabled(clipboardItems.Count == 0);
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, "Import from Clipboard"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, "Import from Clipboard".Loc()))
         {
             ImportFromClipboard(clipboardItems);
         }
         ImGui.EndDisabled();
         ImGui.SameLine();
         ImGui.BeginDisabled(_questController.ManualPriorityQuests.Count == 0);
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Upload, "Export to Clipboard"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Upload, "Export to Clipboard".Loc()))
         {
             ExportToClipboard();
         }
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Check, "Remove finished Quests"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Check, "Remove finished Quests".Loc()))
         {
             _questController.ManualPriorityQuests.RemoveAll(q => _questFunctions.IsQuestComplete(q.Id));
         }
@@ -108,7 +109,7 @@ internal sealed class PriorityWindow : LWindow
 
         using (ImRaii.Disabled(!ImGui.IsKeyDown(ImGuiKey.ModCtrl)))
         {
-            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Trash, "Clear All"))
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Trash, "Clear All".Loc()))
             {
                 _questController.ClearQuestPriority();
             }
@@ -116,7 +117,7 @@ internal sealed class PriorityWindow : LWindow
 
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
         {
-            ImGui.SetTooltip("Hold CTRL to enable this button.");
+            ImGui.SetTooltip("Hold CTRL to enable this button.".Loc());
         }
 
         ImGui.EndDisabled();

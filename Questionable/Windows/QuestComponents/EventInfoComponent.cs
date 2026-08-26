@@ -1,7 +1,8 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using Humanizer;
 using Humanizer.Localisation;
 using Questionable.Controller;
@@ -31,7 +32,7 @@ internal sealed class EventInfoComponent
     [SuppressMessage("ReSharper", "CollectionNeverUpdated.Local")]
     private readonly List<EventQuest> _eventQuests =
     [
-        new("Limited Time Items", [new UnlockLinkId(568)], DateTime.MaxValue),
+        new("Limited Time Items".Loc(), [new UnlockLinkId(568)], DateTime.MaxValue),
         new("Valentione's Day 2026", [new QuestId(5325)], AtDailyReset(new(2026, 2, 16))) // January 15, 2026 at 6:59 a.m. (PST) 
     ];
     private readonly QuestController _questController = questController;

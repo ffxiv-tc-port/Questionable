@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using System;
 using System.Diagnostics;
@@ -57,14 +58,14 @@ internal sealed class QuickAccessButtonsComponent
 
     private void DrawQuestPriorityButton()
     {
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Exclamation, "Priority Quests"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Exclamation, "Priority Quests".Loc()))
         {
             _priorityWindow.ToggleOrUncollapse();
         }
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("Configure priority quests which will be done as soon as possible.");
+            ImGui.SetTooltip("Configure priority quests which will be done as soon as possible.".Loc());
         }
     }
 
@@ -73,7 +74,7 @@ internal sealed class QuickAccessButtonsComponent
         bool isNavmeshAvailable = _commandManager.Commands.ContainsKey("/vnav");
         using (ImRaii.Disabled(!isNavmeshAvailable || !ImGui.IsKeyDown(ImGuiKey.ModCtrl)))
         {
-            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.GlobeEurope, "Rebuild Navmesh"))
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.GlobeEurope, "Rebuild Navmesh".Loc()))
             {
                 _commandManager.ProcessCommand("/vnav rebuild");
             }
@@ -83,18 +84,18 @@ internal sealed class QuickAccessButtonsComponent
         {
             if (!isNavmeshAvailable)
             {
-                ImGui.SetTooltip("vnavmesh is not available.\nPlease install it first.");
+                ImGui.SetTooltip("vnavmesh is not available.\nPlease install it first.".Loc());
             }
             else
             {
-                ImGui.SetTooltip("Hold CTRL to enable this button.\nRebuilding the navmesh will take some time.");
+                ImGui.SetTooltip("Hold CTRL to enable this button.\nRebuilding the navmesh will take some time.".Loc());
             }
         }
     }
 
     private void DrawReloadDataButton()
     {
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.RedoAlt, "Reload Data"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.RedoAlt, "Reload Data".Loc()))
         {
             Reload?.Invoke(this, EventArgs.Empty);
         }
@@ -109,7 +110,7 @@ internal sealed class QuickAccessButtonsComponent
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("Journal Progress");
+            ImGui.SetTooltip("Journal Progress".Loc());
         }
     }
 
@@ -126,7 +127,7 @@ internal sealed class QuickAccessButtonsComponent
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("Sponsor QST development");
+            ImGui.SetTooltip("Sponsor QST development".Loc());
         }
     }
 
@@ -140,7 +141,7 @@ internal sealed class QuickAccessButtonsComponent
         }
 
         int partsToRender = errorCount == 0 || infoCount == 0 ? 1 : 2;
-        using ImRaii.IdDisposable id = ImRaii.PushId("validationissues");
+        using var id = ImRaii.PushId("validationissues");
 
         FontAwesomeIcon icon1 = FontAwesomeIcon.ExclamationTriangle;
         FontAwesomeIcon icon2 = FontAwesomeIcon.InfoCircle;

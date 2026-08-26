@@ -1,4 +1,4 @@
-﻿<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+﻿<Project Sdk="Dalamud.NET.Sdk/12.0.2">
     <PropertyGroup>
         <OutputPath>dist</OutputPath>
         <PathMap Condition="$(SolutionDir) != ''">$(SolutionDir)=X:\</PathMap>
@@ -6,6 +6,19 @@
         <NoWarn>NU1510</NoWarn>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <BuildNumberFile>$(MSBuildProjectDirectory)\BuildNumber.txt</BuildNumberFile>
+        <_PreviousBuildNumber Condition="Exists('$(BuildNumberFile)')">$([System.IO.File]::ReadAllText('$(BuildNumberFile)').Trim())</_PreviousBuildNumber>
+        <_PreviousBuildNumber Condition="'$(_PreviousBuildNumber)' == ''">0</_PreviousBuildNumber>
+        <BuildNumber>$([MSBuild]::Add($(_PreviousBuildNumber), 1))</BuildNumber>
+        <VersionPrefix>7.15.0</VersionPrefix>
+        <Version>$(VersionPrefix).$(BuildNumber)</Version>
+        <AssemblyVersion>$(Version)</AssemblyVersion>
+        <FileVersion>$(Version)</FileVersion>
+    </PropertyGroup>
+    <Target Name="PersistBuildNumber" AfterTargets="Build">
+        <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(BuildNumber)" Overwrite="true" />
+    </Target>
 
     <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
         <DefineConstants>DEBUG;TRACE</DefineConstants>
@@ -13,18 +26,23 @@
 
     <ItemGroup>
         <PackageReference Include="Dalamud.Extensions.MicrosoftLogging" Version="4.0.1"/>
-        <PackageReference Include="ECommons" Version="3.2.0.16"/>
+        <PackageReference Include="ECommons" Version="3.0.0.8"/>
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.4" ExcludeAssets="runtime"/>
         <PackageReference Include="JsonSchema.Net" Version="7.4.0"/>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.8"/>
         <PackageReference Include="System.Text.Json" Version="9.0.3"/>
-        <PackageReference Include="WrathCombo.API" Version="0.5.4"/>
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\GatheringPaths\GatheringPaths.csproj"/>
         <ProjectReference Include="..\Questionable.Model\Questionable.Model.csproj"/>
         <ProjectReference Include="..\QuestPaths\QuestPaths.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="LanguageChineseTraditional.ini">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>
@@ -43,6 +61,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Update="DalamudPackager" Version="15.0.0"/>
+        <PackageReference Update="DalamudPackager" Version="12.0.0"/>
     </ItemGroup>
 </Project>

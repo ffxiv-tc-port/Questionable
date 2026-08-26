@@ -1,5 +1,7 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
+using ECommons.ImGuiMethods;
+using ECommons.LanguageHelpers;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
@@ -46,21 +48,21 @@ internal sealed class QuestJournalComponent
 
     public void DrawQuests()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Quests");
+        using var tab = ImRaii.TabItem("Quests".Loc());
         if (!tab)
         {
             return;
         }
 
-        if (ImGui.CollapsingHeader("Explanation"))
+        if (ImGui.CollapsingHeader("Explanation".Loc()))
         {
-            ImGui.Text("The list below contains all quests that appear in your journal.");
-            ImGui.BulletText("'Supported' lists quests that Questionable can do for you");
-            ImGui.BulletText("'Completed' lists quests your current character has completed.");
+            ImGui.Text("The list below contains all quests that appear in your journal.".Loc());
+            ImGui.BulletText("'Supported' lists quests that Questionable can do for you".Loc());
+            ImGui.BulletText("'Completed' lists quests your current character has completed.".Loc());
             ImGui.BulletText(
-                "Not all quests can be completed even if they're listed as available, e.g. starting city quest chains.");
-            ImGui.BulletText("The text in the Supported column indicates the last time a quest path was reported to work perfectly.");
-            ImGui.TextColoredWrapped(ImGuiColors.DalamudYellow, "Quests can be added to Priority Quests, either individually or by group, with the right click menu.");
+                "Not all quests can be completed even if they're listed as available, e.g. starting city quest chains.".Loc());
+            ImGui.BulletText("The text in the Supported column indicates the last time a quest path was reported to work perfectly.".Loc());
+            ImGuiEx.TextWrapped(ImGuiColors.DalamudYellow, "Quests can be added to Priority Quests, either individually or by group, with the right click menu.".Loc());
 
             ImGui.Spacing();
             ImGui.Separator();
@@ -71,22 +73,22 @@ internal sealed class QuestJournalComponent
 
         ImGui.SameLine();
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-        if (ImGui.InputTextWithHint(string.Empty, "Search quests and categories", ref Filter.SearchText, 256))
+        if (ImGui.InputTextWithHint(string.Empty, "Search quests and categories".Loc(), ref Filter.SearchText, 256))
         {
             UpdateFilter();
         }
 
         if (_filteredSections.Count > 0)
         {
-            using ImRaii.TableDisposable table = ImRaii.Table("Quests", 3, ImGuiTableFlags.NoSavedSettings);
+            using var table = ImRaii.Table("Quests", 3, ImGuiTableFlags.NoSavedSettings);
             if (!table)
             {
                 return;
             }
 
-            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.NoHide);
-            ImGui.TableSetupColumn("Supported", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
-            ImGui.TableSetupColumn("Completed", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.NoHide);
+            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Completed".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
             ImGui.TableHeadersRow();
 
             foreach(FilteredSection section in _filteredSections)
@@ -96,7 +98,7 @@ internal sealed class QuestJournalComponent
         }
         else
         {
-            ImGui.Text("No quest or category matches your search.");
+            ImGui.Text("No quest or category matches your search.".Loc());
         }
     }
 
@@ -262,14 +264,14 @@ internal sealed class QuestJournalComponent
         {
             if (_uiUtils.ChecklistItem(lastChecked, ImGuiColors.DalamudGrey, FontAwesomeIcon.Minus))
             {
-                ImGui.SetTooltip("This quest is not available.");
+                ImGui.SetTooltip("This quest is not available.".Loc());
             }
         }
         else if (fate)
         {
             if (_uiUtils.ChecklistItem(lastChecked, ImGuiColors.DalamudOrange, FontAwesomeIcon.ExclamationTriangle))
             {
-                ImGui.SetTooltip($"This quest requires completing a FATE.{lastCheckedLong}");
+                ImGui.SetTooltip($"{"This quest requires completing a FATE.".Loc()}{lastCheckedLong}");
             }
         }
         else if (quest is { Root.Disabled: false })
@@ -279,30 +281,30 @@ internal sealed class QuestJournalComponent
             {
                 if (_uiUtils.ChecklistItem(lastChecked, ImGuiColors.DalamudRed, FontAwesomeIcon.ExclamationTriangle))
                 {
-                    ImGui.SetTooltip("This quest could not be loaded.");
+                    ImGui.SetTooltip("This quest could not be loaded.".Loc());
                 }
             }
             else if (issues.Count > 0)
             {
                 if (_uiUtils.ChecklistItem(lastChecked, ImGuiColors.ParsedBlue, FontAwesomeIcon.InfoCircle))
                 {
-                    ImGui.SetTooltip("This quest had validation issues.");
+                    ImGui.SetTooltip("This quest had validation issues.".Loc());
                 }
             }
             else if (_uiUtils.ChecklistItem(lastChecked, true))
             {
-                ImGui.SetTooltip($"This quest is supported.{lastCheckedLong}" + (!reason.Equals(defaultReason, StringComparison.Ordinal) ? $"\nComment: {reason}" : ""));
+                ImGui.SetTooltip($"{"This quest is supported.".Loc()}{lastCheckedLong}" + (!reason.Equals(defaultReason, StringComparison.Ordinal) ? $"\n{"Comment".Loc()}: {reason}" : ""));
             }
         }
         else
         {
             if (quest == null)
             {
-                reason = "No quest path.";
+                reason = "No quest path.".Loc();
             }
             if (_uiUtils.ChecklistItem(lastChecked, false))
             {
-                ImGui.SetTooltip($"This quest is not yet supported.{lastCheckedLong}" + (!reason.Equals(defaultReason, StringComparison.Ordinal) ? $"\nReason: {reason}" : ""));
+                ImGui.SetTooltip($"{"This quest is not yet supported.".Loc()}{lastCheckedLong}" + (!reason.Equals(defaultReason, StringComparison.Ordinal) ? $"\n{"Reason".Loc()}: {reason}" : ""));
             }
         }
 

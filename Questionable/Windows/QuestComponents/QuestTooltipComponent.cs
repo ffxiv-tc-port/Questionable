@@ -1,8 +1,9 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Questionable.Controller;
 using Questionable.Data;
@@ -30,7 +31,7 @@ internal sealed class QuestTooltipComponent
 
     public void Draw(IQuestInfo questInfo)
     {
-        using ImRaii.TooltipDisposable tooltip = ImRaii.Tooltip();
+        using var tooltip = ImRaii.Tooltip();
         DrawInner(questInfo, true);
     }
 
@@ -45,19 +46,19 @@ internal sealed class QuestTooltipComponent
         if (questInfo is QuestInfo { IsSeasonalEvent: true })
         {
             ImGui.SameLine();
-            ImGui.TextUnformatted("Event");
+            ImGui.TextUnformatted("Event".Loc());
         }
 
         if (questInfo.IsRepeatable)
         {
             ImGui.SameLine();
-            ImGui.TextUnformatted("Repeatable");
+            ImGui.TextUnformatted("Repeatable".Loc());
         }
 
         if (questInfo is QuestInfo { CompletesInstantly: true })
         {
             ImGui.SameLine();
-            ImGui.TextUnformatted("Instant");
+            ImGui.TextUnformatted("Instant".Loc());
         }
 
         if (_questRegistry.TryGetQuest(questInfo.QuestId, out Quest? quest))
@@ -65,37 +66,37 @@ internal sealed class QuestTooltipComponent
             if (quest.Root.Disabled)
             {
                 ImGui.SameLine();
-                ImGui.TextColored(ImGuiColors.DalamudRed, "Disabled");
+                ImGui.TextColored(ImGuiColors.DalamudRed, "Disabled".Loc());
             }
 
             if (quest.Root.Author.Count == 1)
             {
-                ImGui.Text($"Author: {quest.Root.Author[0]}");
+                ImGui.Text($"{"Author".Loc()}: {quest.Root.Author[0]}");
             }
             else
             {
-                ImGui.Text($"Authors: {string.Join(", ", quest.Root.Author)}");
+                ImGui.Text($"{"Authors".Loc()}: {string.Join(", ", quest.Root.Author)}");
             }
 
             if (quest.Root.Comment != null)
             {
-                ImGui.Text($"Comment: {quest.Root.Comment.Split('\n', 2)[0]}");
+                ImGui.Text($"{"Comment".Loc()}: {quest.Root.Comment.Split('\n', 2)[0]}");
             }
 
             if (quest.Root.LastChecked.Date != null)
             {
-                ImGui.Text($"Last checked: {quest.Root.LastChecked.Date} by {quest.Root.LastChecked.Username}");
+                ImGui.Text($"{"Last checked".Loc()}: {quest.Root.LastChecked.Date} {"by".Loc()} {quest.Root.LastChecked.Username}");
             }
 
             if (questInfo.AlliedSociety != EAlliedSociety.None)
             {
-                ImGui.Text($"Society: {questInfo.AlliedSociety}");
+                ImGui.Text($"{"Society".Loc()}: {questInfo.AlliedSociety}");
             }
         }
         else
         {
             ImGui.SameLine();
-            ImGui.TextColored(ImGuiColors.DalamudRed, "NoQuestPath");
+            ImGui.TextColored(ImGuiColors.DalamudRed, "NoQuestPath".Loc());
         }
 
         DrawQuestUnlocks(questInfo, 0, showItemRewards);
@@ -129,11 +130,11 @@ internal sealed class QuestTooltipComponent
             {
                 if (questInfo.PreviousQuestJoin == EQuestJoin.All)
                 {
-                    ImGui.Text("Requires all:");
+                    ImGui.Text("Requires all:".Loc());
                 }
                 else if (questInfo.PreviousQuestJoin == EQuestJoin.AtLeastOne)
                 {
-                    ImGui.Text("Requires one:");
+                    ImGui.Text("Requires one:".Loc());
                 }
             }
 
@@ -158,8 +159,8 @@ internal sealed class QuestTooltipComponent
                 }
                 else
                 {
-                    using ImRaii.DisabledDisposable _ = ImRaii.Disabled();
-                    _uiUtils.ChecklistItem($"Unknown Quest ({q.QuestId})", ImGuiColors.DalamudGrey,
+                    using var _ = ImRaii.Disabled();
+                    _uiUtils.ChecklistItem($"{"Unknown Quest".Loc()} ({q.QuestId})", ImGuiColors.DalamudGrey,
                         FontAwesomeIcon.Question);
                 }
             }
@@ -169,7 +170,7 @@ internal sealed class QuestTooltipComponent
         {
             if (actualQuestInfo.MoogleDeliveryLevel > 0)
             {
-                ImGui.Text($"Requires Carrier Level {actualQuestInfo.MoogleDeliveryLevel}");
+                ImGui.Text($"{"Requires Carrier Level".Loc()} {actualQuestInfo.MoogleDeliveryLevel}");
             }
 
 
@@ -180,16 +181,16 @@ internal sealed class QuestTooltipComponent
                 {
                     if (actualQuestInfo.QuestLockJoin == EQuestJoin.All)
                     {
-                        ImGui.Text("Blocked by (if all completed):");
+                        ImGui.Text("Blocked by (if all completed):".Loc());
                     }
                     else if (actualQuestInfo.QuestLockJoin == EQuestJoin.AtLeastOne)
                     {
-                        ImGui.Text("Blocked by (if at least completed):");
+                        ImGui.Text("Blocked by (if at least completed):".Loc());
                     }
                 }
                 else
                 {
-                    ImGui.Text("Blocked by (if completed):");
+                    ImGui.Text("Blocked by (if completed):".Loc());
                 }
 
                 foreach(QuestId q in actualQuestInfo.QuestLocks)
@@ -212,16 +213,16 @@ internal sealed class QuestTooltipComponent
                 {
                     if (questInfo.PreviousQuestJoin == EQuestJoin.All)
                     {
-                        ImGui.Text("Requires all:");
+                        ImGui.Text("Requires all:".Loc());
                     }
                     else if (questInfo.PreviousQuestJoin == EQuestJoin.AtLeastOne)
                     {
-                        ImGui.Text("Requires one:");
+                        ImGui.Text("Requires one:".Loc());
                     }
                 }
                 else
                 {
-                    ImGui.Text("Requires:");
+                    ImGui.Text("Requires:".Loc());
                 }
 
                 foreach(ushort instanceId in actualQuestInfo.PreviousInstanceContent)
@@ -237,20 +238,20 @@ internal sealed class QuestTooltipComponent
                 ImGui.Separator();
                 string gcName = actualQuestInfo.GrandCompany switch
                 {
-                    GrandCompany.Maelstrom => "Maelstrom",
-                    GrandCompany.TwinAdder => "Twin Adder",
-                    GrandCompany.ImmortalFlames => "Immortal Flames",
-                    var _ => "None"
+                    GrandCompany.Maelstrom => "Maelstrom".Loc(),
+                    GrandCompany.TwinAdder => "Twin Adder".Loc(),
+                    GrandCompany.ImmortalFlames => "Immortal Flames".Loc(),
+                    var _ => "None".Loc()
                 };
 
                 GrandCompany currentGrandCompany = _questFunctions.GetGrandCompany();
-                _uiUtils.ChecklistItem($"Grand Company: {gcName}", actualQuestInfo.GrandCompany == currentGrandCompany);
+                _uiUtils.ChecklistItem($"{"Grand Company".Loc()}: {gcName}", actualQuestInfo.GrandCompany == currentGrandCompany);
             }
 
             if (showItemRewards && actualQuestInfo.ItemRewards.Count > 0)
             {
                 ImGui.Separator();
-                ImGui.Text("Item Rewards:");
+                ImGui.Text("Item Rewards:".Loc());
                 foreach(ItemReward reward in actualQuestInfo.ItemRewards)
                 {
                     ImGui.BulletText(reward.Name);
@@ -274,7 +275,7 @@ internal sealed class QuestTooltipComponent
 
         if (questInfo.IsMainScenarioQuest)
         {
-            name += $" ({questInfo.QuestId}, MSQ)";
+            name += $" ({questInfo.QuestId}, {"MSQ".Loc()})";
         }
         else
         {

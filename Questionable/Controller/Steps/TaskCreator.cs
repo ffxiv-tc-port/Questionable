@@ -1,4 +1,5 @@
 ﻿using Dalamud.Plugin.Services;
+using ECommons.MathHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller.Steps.Interactions;
@@ -29,7 +30,7 @@ internal sealed class TaskCreator
     {
         List<ITask> newTasks;
 # if !DEBUG
-        if (quest.Root.Disabled && sequenceNumber.InRange(1, 2))
+        if (quest.Root.Disabled && sequenceNumber.InRange(1, 2, true))
         {
             var reason = (quest.Root.Comment ?? "<no reason specified>").Split('\n', 2)[0];
             _chatGui.PrintError($"The quest '{quest.Info.Name}' has been marked as Disabled for the following reason: {reason}",

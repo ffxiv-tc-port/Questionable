@@ -46,7 +46,7 @@ internal sealed class CraftworksSupplyController : IDisposable
             return;
         }
 
-        AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
+        AtkUnitBase* addon = (AtkUnitBase*)args.Addon;
         InteractWithBankaCraftworksSupply(addon);
     }
 
@@ -74,8 +74,8 @@ internal sealed class CraftworksSupplyController : IDisposable
             _logger.LogInformation("Selecting an item for slot {Slot}", slot);
             AtkValue* selectSlot = stackalloc AtkValue[]
             {
-                new() { Type = AtkValueType.Int, Int = 2 },
-                new() { Type = AtkValueType.Int, Int = slot /* slot */ }
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 2 },
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = slot /* slot */ }
             };
             addon->FireCallback(2, selectSlot);
             return;
@@ -97,13 +97,13 @@ internal sealed class CraftworksSupplyController : IDisposable
             return;
         }
 
-        AddonContextIconMenu* addonContextIconMenu = (AddonContextIconMenu*)args.Addon.Address;
+        AddonContextIconMenu* addonContextIconMenu = (AddonContextIconMenu*)args.Addon;
         if (!addonContextIconMenu->IsVisible)
         {
             return;
         }
 
-        ushort parentId = addonContextIconMenu->BlockedParentId;
+        ushort parentId = addonContextIconMenu->ContextMenuParentId;
         if (parentId == 0)
         {
             return;
@@ -115,10 +115,10 @@ internal sealed class CraftworksSupplyController : IDisposable
             _logger.LogInformation("Picking item for {AddonName}", parentAddon->NameString);
             AtkValue* selectSlot = stackalloc AtkValue[]
             {
-                new() { Type = AtkValueType.Int, Int = 0 },
-                new() { Type = AtkValueType.Int, Int = 0 /* slot */ },
-                new() { Type = AtkValueType.UInt, UInt = 20802 /* probably the item's icon */ },
-                new() { Type = AtkValueType.UInt, UInt = 0 },
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 0 },
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 0 /* slot */ },
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.UInt, UInt = 20802 /* probably the item's icon */ },
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.UInt, UInt = 0 },
                 new() { Type = 0, Int = 0 }
             };
             addonContextIconMenu->FireCallback(5, selectSlot);

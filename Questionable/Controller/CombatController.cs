@@ -1,4 +1,5 @@
 ﻿using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -413,7 +414,7 @@ internal sealed class CombatController : IDisposable
                 if ((!expectQuestMarker || gameObjectStruct->NamePlateIconId != 0 || _currentFight.Data.SpawnType == EEnemySpawnType.FateEnemies) &&
                     _currentFight.Data.KillEnemyDataIds.Contains(GameFunctions.GetBaseID(battleNpc)))
                 {
-                    if (_currentFight.Data.SpawnType == EEnemySpawnType.FateEnemies && !PlayerState.Instance()->IsLevelSynced)
+                    if (_currentFight.Data.SpawnType == EEnemySpawnType.FateEnemies && PlayerState.Instance()->IsLevelSynced == 0)
                     {
                         _chatFunctions.ExecuteCommand("/lsync");
                     }
@@ -422,7 +423,7 @@ internal sealed class CombatController : IDisposable
             }
 
             // enemies that we have aggro on
-            if (battleNpc.BattleNpcKind is BattleNpcSubKind.BNpcPart or BattleNpcSubKind.Combatant)
+            if (battleNpc.BattleNpcKind is BattleNpcSubKind.BattleNpcPart or BattleNpcSubKind.Enemy)
             {
                 // npc that starts a fate or does turn-ins; not sure why they're marked as hostile
                 if (gameObjectStruct->NamePlateIconId is 60093 or 60732)
@@ -573,7 +574,7 @@ internal sealed class CombatController : IDisposable
         _wasInCombat = false;
     }
 
-    private void TerritoryChanged(uint territoryId)
+    private void TerritoryChanged(ushort territoryId)
     {
         Stop("TerritoryChanged");
     }

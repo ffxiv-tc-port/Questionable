@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -190,7 +191,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void SelectStringPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonSelectString* addonSelectString = (AddonSelectString*)args.Addon.Address;
+        AddonSelectString* addonSelectString = (AddonSelectString*)args.Addon;
         SelectStringPostSetup(addonSelectString, false);
     }
 
@@ -210,7 +211,7 @@ internal sealed class InteractionUiController : IDisposable
         List<string?> answers = [];
         for(ushort i = 7; i < addonSelectString->AtkUnitBase.AtkValuesCount; ++i)
         {
-            if (addonSelectString->AtkUnitBase.AtkValues[i].Type == AtkValueType.String)
+            if (addonSelectString->AtkUnitBase.AtkValues[i].Type == FFXIVClientStructs.FFXIV.Component.GUI.ValueType.String)
             {
                 answers.Add(AtkValueAdapter.ReadString(addonSelectString->AtkUnitBase.AtkValues[i]));
             }
@@ -226,7 +227,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void CutsceneSelectStringPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonCutSceneSelectString* addonCutSceneSelectString = (AddonCutSceneSelectString*)args.Addon.Address;
+        AddonCutSceneSelectString* addonCutSceneSelectString = (AddonCutSceneSelectString*)args.Addon;
         CutsceneSelectStringPostSetup(addonCutSceneSelectString, false);
     }
 
@@ -259,7 +260,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void SelectIconStringPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonSelectIconString* addonSelectIconString = (AddonSelectIconString*)args.Addon.Address;
+        AddonSelectIconString* addonSelectIconString = (AddonSelectIconString*)args.Addon;
         SelectIconStringPostSetup(addonSelectIconString, false);
     }
 
@@ -641,7 +642,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void SelectYesnoPostSetup(AddonEvent type, AddonArgs args)
     {
-        AddonSelectYesno* addonSelectYesno = (AddonSelectYesno*)args.Addon.Address;
+        AddonSelectYesno* addonSelectYesno = (AddonSelectYesno*)args.Addon;
         SelectYesnoPostSetup(addonSelectYesno, false);
     }
 
@@ -870,7 +871,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void DifficultySelectYesNoPostSetup(AddonEvent type, AddonArgs args)
     {
-        AtkUnitBase* addonDifficultySelectYesNo = (AtkUnitBase*)args.Addon.Address;
+        AtkUnitBase* addonDifficultySelectYesNo = (AtkUnitBase*)args.Addon;
         DifficultySelectYesNoPostSetup(addonDifficultySelectYesNo, false);
     }
 
@@ -905,8 +906,8 @@ internal sealed class InteractionUiController : IDisposable
             _logger.LogInformation("Confirming difficulty ({Difficulty}) for quest battle", _configuration.SinglePlayerDuties.RetryDifficulty);
             AtkValue* selectChoice = stackalloc AtkValue[]
             {
-                new() { Type = AtkValueType.Int, Int = 0 },
-                new() { Type = AtkValueType.Int, Int = _configuration.SinglePlayerDuties.RetryDifficulty }
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 0 },
+                new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = _configuration.SinglePlayerDuties.RetryDifficulty }
             };
             addonDifficultySelectYesNo->FireCallback(2, selectChoice);
         }
@@ -1050,7 +1051,7 @@ internal sealed class InteractionUiController : IDisposable
 
     private unsafe void PointMenuPostSetup(AddonEvent type, AddonArgs args)
     {
-        AtkUnitBase* addonPointMenu = (AtkUnitBase*)args.Addon.Address;
+        AtkUnitBase* addonPointMenu = (AtkUnitBase*)args.Addon;
         PointMenuPostSetup(addonPointMenu);
     }
 
@@ -1098,8 +1099,8 @@ internal sealed class InteractionUiController : IDisposable
         _logger.LogInformation("Handling point menu, picking choice {Choice} (index = {Index})", choice, counter);
         AtkValue* selectChoice = stackalloc AtkValue[]
         {
-            new() { Type = AtkValueType.Int, Int = 13 },
-            new() { Type = AtkValueType.UInt, UInt = choice }
+            new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 13 },
+            new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.UInt, UInt = choice }
         };
         addonPointMenu->FireCallback(2, selectChoice);
 
@@ -1114,7 +1115,7 @@ internal sealed class InteractionUiController : IDisposable
         }
 
         _logger.LogInformation("Confirming selected housing ward");
-        AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
+        AtkUnitBase* addon = (AtkUnitBase*)args.Addon;
         addon->FireCallbackInt(0);
     }
 

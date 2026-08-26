@@ -134,7 +134,6 @@ internal sealed class Configuration : IPluginConfiguration
     {
         None,
         BossMod,
-        WrathCombo,
         RotationSolverReborn
     }
 

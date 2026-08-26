@@ -1,9 +1,10 @@
-using Dalamud.Bindings.ImGui;
+using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Questionable.Controller;
 using Questionable.Functions;
@@ -58,14 +59,14 @@ internal sealed class StopConditionComponent : ConfigComponent
 
     public override void DrawTab()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Stop###StopConditionns");
+        using var tab = ImRaii.TabItem($"{"Stop".Loc()}###StopConditionns");
         if (!tab)
         {
             return;
         }
 
         bool enabled = Configuration.Stop.Enabled;
-        if (ImGui.Checkbox("Stop Questionable when any of the conditions below are met", ref enabled))
+        if (ImGui.Checkbox("Stop Questionable when any of the conditions below are met".Loc(), ref enabled))
         {
             Configuration.Stop.Enabled = enabled;
             Save();
@@ -76,10 +77,10 @@ internal sealed class StopConditionComponent : ConfigComponent
         using (ImRaii.Disabled(!enabled))
         {
             // Level stop condition section
-            ImGui.Text("Stop when character level reaches:");
+            ImGui.Text("Stop when character level reaches:".Loc());
 
             bool levelToStopAfter = Configuration.Stop.LevelToStopAfter;
-            if (ImGui.Checkbox("Enable level stop condition", ref levelToStopAfter))
+            if (ImGui.Checkbox("Enable level stop condition".Loc(), ref levelToStopAfter))
             {
                 Configuration.Stop.LevelToStopAfter = levelToStopAfter;
                 Save();
@@ -89,7 +90,7 @@ internal sealed class StopConditionComponent : ConfigComponent
             {
                 int targetLevel = Configuration.Stop.TargetLevel;
                 ImGui.SetNextItemWidth(100);
-                if (ImGui.InputInt("Stop at level", ref targetLevel, 1, 5))
+                if (ImGui.InputInt("Stop at level".Loc(), ref targetLevel, 1, 5))
                 {
                     Configuration.Stop.TargetLevel = Math.Max(1, Math.Min(100, targetLevel));
                     Save();
@@ -103,7 +104,7 @@ internal sealed class StopConditionComponent : ConfigComponent
                     if (currentLevel > 0)
                     {
                         ImGui.SameLine();
-                        ImGui.TextDisabled($"(Current: {currentLevel})");
+                        ImGui.TextDisabled($"({"Current".Loc()}: {currentLevel})");
                     }
                 }
             }
@@ -111,7 +112,7 @@ internal sealed class StopConditionComponent : ConfigComponent
             ImGui.Separator();
 
             // Quest completion stop condition section
-            ImGui.Text("Stop when completing any of the quests selected below:");
+            ImGui.Text("Stop when completing any of the quests selected below:".Loc());
 
             _questSelector.DrawSelection();
 
@@ -122,7 +123,7 @@ internal sealed class StopConditionComponent : ConfigComponent
             {
                 using (ImRaii.Disabled(!ImGui.IsKeyDown(ImGuiKey.ModCtrl)))
                 {
-                    if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Trash, "Clear All"))
+                    if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Trash, "Clear All".Loc()))
                     {
                         Configuration.Stop.QuestsToStopAfter.Clear();
                         Save();
@@ -131,7 +132,7 @@ internal sealed class StopConditionComponent : ConfigComponent
 
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 {
-                    ImGui.SetTooltip("Hold CTRL to enable this button.");
+                    ImGui.SetTooltip("Hold CTRL to enable this button.".Loc());
                 }
 
                 ImGui.Separator();

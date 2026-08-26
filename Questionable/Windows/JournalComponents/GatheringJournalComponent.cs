@@ -1,10 +1,11 @@
-﻿using Dalamud.Bindings.ImGui;
+﻿using ImGuiNET;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons.ExcelServices;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
@@ -153,29 +154,29 @@ internal sealed class GatheringJournalComponent
 
     public void DrawGatheringItems()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Gathering Points");
+        using var tab = ImRaii.TabItem("Gathering Points".Loc());
         if (!tab)
         {
             return;
         }
 
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-        if (ImGui.InputTextWithHint(string.Empty, "Search areas, gathering points and items", ref _searchText, 256))
+        if (ImGui.InputTextWithHint(string.Empty, "Search areas, gathering points and items".Loc(), ref _searchText, 256))
         {
             UpdateFilter();
         }
 
         if (_filteredExpansions.Count > 0)
         {
-            using ImRaii.TableDisposable table = ImRaii.Table("GatheringPoints", 3, ImGuiTableFlags.NoSavedSettings);
+            using var table = ImRaii.Table("GatheringPoints", 3, ImGuiTableFlags.NoSavedSettings);
             if (!table)
             {
                 return;
             }
 
-            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.NoHide);
-            ImGui.TableSetupColumn("Supported", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
-            ImGui.TableSetupColumn("Collected", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.NoHide);
+            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Collected".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
             ImGui.TableHeadersRow();
 
             foreach(FilteredExpansion expansion in _filteredExpansions)
@@ -185,7 +186,7 @@ internal sealed class GatheringJournalComponent
         }
         else
         {
-            ImGui.Text("No area, gathering point or item matches your search text.");
+            ImGui.Text("No area, gathering point or item matches your search text.".Loc());
         }
     }
 
