@@ -44,10 +44,17 @@ internal static class SendNotification
     internal sealed class Executor
     (
         IChatGui chatGui,
-        Configuration configuration) : TaskExecutor<Task>
+        Configuration configuration,
+        TataruPraiseIpc tataruPraiseIpc) : TaskExecutor<Task>
     {
         protected override bool Start()
         {
+            // 🔴 塔塔露的語音提醒刻意放在 Notifications.Enabled 前面，跟聊天訊息各走各的開關：
+            //    這個任務本身就是「流程走到需要玩家親自處理的步驟」，語音要不要出聲由
+            //    Notifications.PraiseWithTataru 自己決定。
+            // 📌 一個 SendNotification 任務只會 Start 一次，所以這裡天然就是狀態邊緣，不需要去重。
+            tataruPraiseIpc.NotifyNeedHelp($"需要手動處理的步驟：{Task.InteractionType}");
+
             if (!configuration.Notifications.Enabled)
             {
                 return false;

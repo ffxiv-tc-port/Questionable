@@ -78,7 +78,7 @@ internal abstract class MiniTaskController<T> : IDisposable
                     _logger.LogError(e, "Failed to start task {TaskName}", upcomingTask.ToString());
                     _chatGui.PrintError(
                         $"Failed to start task '{upcomingTask}', please check /xllog for details.", CommandHandler.MessageTag, CommandHandler.TagColor);
-                    Stop("Task failed to start");
+                    StopDueToFailure("Task failed to start");
                     return;
                 }
             }
@@ -105,7 +105,7 @@ internal abstract class MiniTaskController<T> : IDisposable
                 _taskQueue.CurrentTaskExecutor.CurrentTask.ToString());
             _chatGui.PrintError(
                 $"Failed to update task '{_taskQueue.CurrentTaskExecutor.CurrentTask}', please check /xllog for details.", CommandHandler.MessageTag, CommandHandler.TagColor);
-            Stop("Task failed to update");
+            StopDueToFailure("Task failed to update");
             return;
         }
 
@@ -176,6 +176,19 @@ internal abstract class MiniTaskController<T> : IDisposable
     }
 
     public abstract void Stop(string label);
+
+    /// <summary>
+    /// 因為「任務跑不下去」而停止（例外、資料不支援之類），跟使用者自己按停止、或流程正常結束不一樣。
+    /// </summary>
+    /// <remarks>
+    /// 📌 預設行為與 <see cref="Stop"/> 完全相同，衍生類別可以覆寫來多做一件事
+    /// （<see cref="QuestController"/> 會在這裡請 TataruPraise 喊一句「需要幫忙」）。
+    /// <see cref="GatheringController"/> 沿用預設，行為不變。
+    /// </remarks>
+    protected virtual void StopDueToFailure(string label)
+    {
+        Stop(label);
+    }
 
     public virtual IList<string> GetRemainingTaskNames()
     {

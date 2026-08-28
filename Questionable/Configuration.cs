@@ -97,6 +97,16 @@ internal sealed class Configuration : IPluginConfiguration
         public XivChatType ChatType { get; set; } = XivChatType.Debug;
         public bool ShowTrayMessage { get; set; }
         public bool FlashTaskbar { get; set; }
+
+        /// <summary>
+        /// 自動任務卡住／走到需要人工的步驟時，請 TataruPraise 用語音喊一句「需要幫忙」。
+        /// </summary>
+        /// <remarks>
+        /// 📌 預設開著：沒裝 TataruPraise 的人完全感覺不到（IPC 沒有人註冊，記錄檔只會留一行 Information），
+        /// 裝了的人不用再去翻設定才會生效。<b>刻意不受上面 <see cref="Enabled"/> 那個總開關管</b>——
+        /// 那個管的是「走到手動步驟時要不要印聊天訊息」，而這裡連「因為錯誤／卡住而停下來」也算。
+        /// </remarks>
+        public bool PraiseWithTataru { get; set; } = true;
     }
 
     internal sealed class AdvancedConfiguration

@@ -105,7 +105,10 @@ internal sealed class PartyWatchDog : IDisposable
             _chatGui.PrintError(
                 $"Stopping Questionable: {reason}. If you believe this to be correct, please restart Questionable manually.",
                 CommandHandler.MessageTag, CommandHandler.TagColor);
-            _questController.Stop(reason);
+
+            // 這條路徑一律是「自動任務被迫中斷、要人來看一下」——上面那句訊息本身就寫著
+            // 「請自行重新啟動」。狀態邊緣由 Stop() 內部的 IsRunning/AutomationType 判斷保證。
+            _questController.Stop(reason, true);
         }
     }
 }

@@ -14,6 +14,7 @@ using Questionable.Controller.Steps.Interactions;
 using Questionable.Controller.Steps.Shared;
 using Questionable.Controller.Utils;
 using Questionable.Data;
+using Questionable.External;
 using Questionable.Functions;
 using Questionable.Model;
 using Questionable.Model.Questing;
@@ -71,6 +72,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     private readonly QuestRegistry _questRegistry;
     private readonly SinglePlayerDutyConfigComponent _singlePlayerDutyConfigComponent;
     private readonly TaskCreator _taskCreator;
+    private readonly TataruPraiseIpc _tataruPraiseIpc;
     private readonly IToastGui _toastGui;
     private EAutomationType _automationType;
     private DateTime _lastAutoRefresh = DateTime.MinValue;
@@ -118,7 +120,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         InterruptHandler interruptHandler,
         IDataManager dataManager,
         SinglePlayerDutyConfigComponent singlePlayerDutyConfigComponent,
-        AlliedSocietyQuestFunctions alliedSocietyQuestFunctions)
+        AlliedSocietyQuestFunctions alliedSocietyQuestFunctions,
+        TataruPraiseIpc tataruPraiseIpc)
         : base(chatGui, condition, serviceProvider, interruptHandler, dataManager, logger)
     {
         _clientState = clientState;
@@ -139,6 +142,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         _taskCreator = taskCreator;
         _singlePlayerDutyConfigComponent = singlePlayerDutyConfigComponent;
         _alliedSocietyQuestFunctions = alliedSocietyQuestFunctions;
+        _tataruPraiseIpc = tataruPraiseIpc;
         _logger = logger;
         _highlightObject = highlightObject;
 
@@ -318,7 +322,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             }
             else if (!_taskQueue.AllTasksComplete)
             {
-                StopAllDueToConditionFailed("HP = 0");
+                StopAllDueToConditionFailed("HP = 0", true);
             }
         }
         else if (_configuration.General.UseEscToCancelQuesting && _keyState[VirtualKey.ESCAPE])
@@ -595,7 +599,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                                 _logger.LogInformation(
                                     "Stopping automation, player level ({PlayerLevel}) < quest level ({QuestLevel}",
                                     PlayerState.Instance()->CurrentLevel, quest.Info.Level);
-                                Stop("Quest level too high");
+                                Stop("Quest level too high", true);
                             }
                             else
                             {
@@ -613,7 +617,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                     {
                         _logger.LogInformation("No active quest anymore? Not sure what happened...");
                         StartedQuest = null;
-                        Stop("No active Quest");
+                        Stop("No active Quest", true);
                     }
 
                     return;
@@ -668,7 +672,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             if (sequence == null)
             {
                 DebugState = $"Sequence {questToRun.Sequence} not found";
-                Stop("Unknown sequence");
+                Stop("Unknown sequence", true);
                 return;
             }
 
@@ -685,7 +689,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             if (sequence.Steps.Count > 0 && questToRun.Step >= sequence.Steps.Count)
             {
                 DebugState = "Step not found";
-                Stop("Unknown step");
+                Stop("Unknown step", true);
                 return;
             }
 
@@ -820,6 +824,26 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
     public override void Stop(string label)
     {
+        Stop(label, false);
+    }
+
+    /// <summary>
+    /// 停止自動任務。
+    /// </summary>
+    /// <param name="label">停止原因，寫進記錄檔。</param>
+    /// <param name="needsManualAttention">
+    /// 這次停止是不是「卡住了，要人來看一下」——不支援的步驟、任務跑不下去、資料對不上之類。
+    /// 使用者自己按停止、走到設定好的停止點、流程正常結束都<b>不算</b>。
+    /// </param>
+    /// <remarks>
+    /// 🔴 <b>通知刻意寫在下面那個 <c>if</c> 裡面。</b>那個判斷本身就是「從執行中變成停下來」的狀態邊緣：
+    /// 進得去代表這一幀真的把自動化停掉了，第二幀（<c>IsRunning</c> 已經是 false、
+    /// <c>AutomationType</c> 已經被設成 <see cref="EAutomationType.Manual"/>）就進不去。
+    /// <c>Stop("Unknown sequence")</c> 這類呼叫點是每幀都會走到的輪詢路徑，
+    /// 少了這道邊緣就會變成「一直念」——而那是不會報錯的。
+    /// </remarks>
+    public void Stop(string label, bool needsManualAttention)
+    {
         _highlightObject.SetHighlight([]);
         using IDisposable? scope = _logger.BeginScope($"Stop/{label}");
         if (IsRunning || AutomationType != EAutomationType.Manual)
@@ -843,12 +867,30 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                     }
                 }
             }
+
+            if (needsManualAttention)
+            {
+                _tataruPraiseIpc.NotifyNeedHelp(label);
+            }
         }
+    }
+
+    /// <inheritdoc/>
+    protected override void StopDueToFailure(string label)
+    {
+        Stop(label, true);
     }
 
     public void StopAllDueToConditionFailed(string label)
     {
-        Stop(label);
+        StopAllDueToConditionFailed(label, false);
+    }
+
+    /// <param name="needsManualAttention">見 <see cref="Stop(string, bool)"/>。</param>
+    /// <inheritdoc cref="StopAllDueToConditionFailed(string)"/>
+    public void StopAllDueToConditionFailed(string label, bool needsManualAttention)
+    {
+        Stop(label, needsManualAttention);
         _movementController.Stop();
         _combatController.Stop(label);
         _gatheringController.Stop(label);
@@ -1057,7 +1099,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         {
             _logger.LogError(e, "Failed to create tasks");
             _chatGui.PrintError("Failed to start next task sequence, please check /xllog for details.", CommandHandler.MessageTag, CommandHandler.TagColor);
-            Stop("Tasks failed to create");
+            Stop("Tasks failed to create", true);
         }
     }
 

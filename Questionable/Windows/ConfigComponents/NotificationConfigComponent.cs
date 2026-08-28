@@ -69,5 +69,22 @@ internal sealed class NotificationConfigComponent
                 }
             }
         }
+
+        ImGui.Separator();
+
+        // 📌 刻意不放進上面那個 Disabled 區塊：聊天通知的總開關管的是「走到手動步驟時印不印訊息」，
+        //    而語音提醒連「因為錯誤／卡住而停下來」也會喊，兩者不是同一件事。
+        bool praiseWithTataru = Configuration.Notifications.PraiseWithTataru;
+        if (ImGui.Checkbox("Ask Tataru to speak up when questing gets stuck (requires TataruPraise)".Loc(),
+            ref praiseWithTataru))
+        {
+            Configuration.Notifications.PraiseWithTataru = praiseWithTataru;
+            Save();
+        }
+
+        ImGuiComponents.HelpMarker(
+            ("Whenever automatic questing stops because it is stuck - an unsupported step, a task that failed, " +
+             "or a step that has to be done by hand - TataruPraise is asked to say a line out loud. " +
+             "Does nothing if TataruPraise is not installed.").Loc());
     }
 }
