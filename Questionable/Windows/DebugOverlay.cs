@@ -64,6 +64,10 @@ internal sealed class DebugOverlay : Window
 
     public override void PreDraw()
     {
+        // Dalamud Window 基底類別的 PreDraw() 負責推每視窗不透明度(標題列右鍵選單那個滑桿)。
+        // 覆寫而不呼叫 base 會讓那個內建功能對本視窗靜默半失效;base 的 push 要在最外層,
+        // 本類別沒有覆寫 PostDraw,base 版本照樣被 DrawInternal 呼叫,push/pop 仍然成對。
+        base.PreDraw();
         Size = ImGui.GetIO().DisplaySize;
     }
 
