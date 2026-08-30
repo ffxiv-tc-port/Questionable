@@ -106,21 +106,24 @@ internal sealed class BossModIpc
         }
     }
 
-    // TODO this should use your actual rotation plugin, not always vbm
+    // TODO this should use your actual rotation plugin, not always BossMod
+    // 🔴 指令前綴是 /bmr 與 /bmrai(BossmodReborn 本 fork 的註冊名),不是上游的 /vbm 與 /vbmai。
+    //    ICommandManager.ProcessCommand 對未註冊的指令只會回傳 false、不寫任何 log,
+    //    所以前綴打錯時這幾行是完全靜默的空操作 —— 換 BossMod 分支時要一起改。
     /// <returns><c>true</c> if the AI was enabled; <c>false</c> if BossMod could not be reached.</returns>
     public bool EnableAi(bool passive)
     {
-        //_commandManager.ProcessCommand("/vbmai on");
-        _commandManager.ProcessCommand("/vbm cfg ZoneModuleConfig EnableQuestBattles true");
-        _commandManager.ProcessCommand("/vbm cfg Autorotation ClearPresetOnCombatEnd false");
+        //_commandManager.ProcessCommand("/bmrai on");
+        _commandManager.ProcessCommand("/bmr cfg ZoneModuleConfig EnableQuestBattles true");
+        _commandManager.ProcessCommand("/bmr cfg Autorotation ClearPresetOnCombatEnd false");
         return SetPreset(passive ? EPreset.Overworld : EPreset.QuestBattle);
     }
 
     /// <returns><c>true</c> if the AI was disabled; <c>false</c> if BossMod could not be reached.</returns>
     public bool DisableAi()
     {
-        _commandManager.ProcessCommand("/vbmai off");
-        _commandManager.ProcessCommand("/vbm cfg ZoneModuleConfig EnableQuestBattles false");
+        _commandManager.ProcessCommand("/bmrai off");
+        _commandManager.ProcessCommand("/bmr cfg ZoneModuleConfig EnableQuestBattles false");
         return ClearPreset();
     }
 
