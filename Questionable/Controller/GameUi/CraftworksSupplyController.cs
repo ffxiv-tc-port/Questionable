@@ -6,6 +6,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using Microsoft.Extensions.Logging;
 using Questionable.Utils;
 using System;
+using System.Globalization;
 namespace Questionable.Controller.GameUi;
 
 internal sealed class CraftworksSupplyController : IDisposable
@@ -96,6 +97,14 @@ internal sealed class CraftworksSupplyController : IDisposable
                 continue;
             }
 
+            // 多次互動窗:逐格挑選、窗不會因為被按而消失 ⇒ 逃生口用 15 幀。
+            if (!AddonPressGuard.TryBeginPress("BankaCraftworksSupply", addon,
+                    "slot:" + slot.ToString(CultureInfo.InvariantCulture),
+                    AddonPressGuard.RoutineRePressEscapeFrames))
+            {
+                return;
+            }
+
             _logger.LogInformation("Selecting an item for slot {Slot}", slot);
             AtkValue* selectSlot = stackalloc AtkValue[]
             {
@@ -109,8 +118,11 @@ internal sealed class CraftworksSupplyController : IDisposable
         // do turn-in if any item is provided
         if (atkValues[31].UInt != 0)
         {
-            _logger.LogInformation("Confirming turn-in");
-            addon->FireCallbackInt(0);
+            if (AddonPressGuard.TryBeginPress("BankaCraftworksSupply", addon, "confirm"))
+            {
+                _logger.LogInformation("Confirming turn-in");
+                addon->FireCallbackInt(0);
+            }
         }
     }
 
@@ -144,6 +156,14 @@ internal sealed class CraftworksSupplyController : IDisposable
 
         if (parentAddon->NameString is "BankaCraftworksSupply")
         {
+            // 🔴 這支掛在 PostReceiveEvent 上 —— ContextIconMenu 每收到一個事件就會進來一次。
+            // 挑選(FireCallback 5)＋關閉(Close) 是刻意的一組動作，用同一個 key 一起罩住，
+            // 免得對已經在關閉中的選單再送第二組。
+            if (!AddonPressGuard.TryBeginPress("ContextIconMenu", (AtkUnitBase*)addonContextIconMenu, "pick"))
+            {
+                return;
+            }
+
             _logger.LogInformation("Picking item for {AddonName}", parentAddon->NameString);
             AtkValue* selectSlot = stackalloc AtkValue[]
             {

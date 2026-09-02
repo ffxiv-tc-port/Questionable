@@ -89,7 +89,7 @@ internal sealed class HelpUiController : IDisposable
         {
             _logger.LogInformation("Closing Unending Codex");
             AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
-            addon->FireCallbackInt(-2);
+            AddonPressGuard.PressCallbackInt("AkatsukiNote", addon, -2);
         }
     }
 
@@ -104,7 +104,7 @@ internal sealed class HelpUiController : IDisposable
     private unsafe void ContentsTutorialPostSetup(AtkUnitBase* addon)
     {
         _logger.LogInformation("Closing ContentsTutorial");
-        addon->FireCallbackInt(13);
+        AddonPressGuard.PressCallbackInt("ContentsTutorial", addon, 13);
     }
 
     /// <summary>
@@ -116,8 +116,10 @@ internal sealed class HelpUiController : IDisposable
         {
             _logger.LogInformation("Closing MultipleHelpWindow");
             AtkUnitBase* addon = (AtkUnitBase*)args.Addon.Address;
-            addon->FireCallbackInt(-2);
-            addon->FireCallbackInt(-1);
+            // −2 後面接 −1 是刻意的兩發不同參數。守衛的粒度是 (窗名, 位址, 參數組)，
+            // 所以這兩發互不阻擋；被擋掉的只會是「同一發重按」。
+            AddonPressGuard.PressCallbackInt("MultipleHelpWindow", addon, -2);
+            AddonPressGuard.PressCallbackInt("MultipleHelpWindow", addon, -1);
         }
     }
 
@@ -132,7 +134,7 @@ internal sealed class HelpUiController : IDisposable
     private unsafe void JobHudNoticePostSetup(AtkUnitBase* addon)
     {
         _logger.LogInformation("Clicking the JobHudNotice window to open the relevant Guide page");
-        addon->FireCallbackInt(0);
+        AddonPressGuard.PressCallbackInt("JobHudNotice", addon, 0);
     }
 
     private unsafe void GuidePostSetup(AddonEvent type, AddonArgs args)
@@ -146,7 +148,7 @@ internal sealed class HelpUiController : IDisposable
     private unsafe void GuidePostSetup(AtkUnitBase* addon)
     {
         _logger.LogInformation("Closing Guide window");
-        addon->FireCallbackInt(-1);
+        AddonPressGuard.PressCallbackInt("Guide", addon, -1);
     }
 
     private unsafe void EventTutorialPostSetup(AddonEvent type, AddonArgs args)
@@ -167,6 +169,6 @@ internal sealed class HelpUiController : IDisposable
     private unsafe void EventTutorialPostSetup(AtkUnitBase* addon)
     {
         _logger.LogInformation("Closing EventTutorial window");
-        addon->FireCallbackInt(-1);
+        AddonPressGuard.PressCallbackInt("EventTutorial", addon, -1);
     }
 }
