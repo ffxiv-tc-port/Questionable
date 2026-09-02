@@ -154,7 +154,13 @@ internal sealed class CraftworksSupplyController : IDisposable
             return;
         }
 
-        if (parentAddon->NameString is "BankaCraftworksSupply")
+        // 🔴 名稱用有界讀法：CS 產生的 NameString 是無上限的 null-terminated 掃描，
+        // 對「可能正在關閉／剛被回收」的視窗做無界讀取就是攔不到的存取違規。
+        // 而且只讀這一次 —— 底下 FireCallback + Close(true) 之後再回頭讀同一個實例，
+        // 那已經是對「可能已經被銷毀的視窗」解參考。
+        string parentName = AddonUtils.ReadAddonName(parentAddon);
+
+        if (parentName is "BankaCraftworksSupply")
         {
             // 🔴 這支掛在 PostReceiveEvent 上 —— ContextIconMenu 每收到一個事件就會進來一次。
             // 挑選(FireCallback 5)＋關閉(Close) 是刻意的一組動作，用同一個 key 一起罩住，
@@ -164,7 +170,7 @@ internal sealed class CraftworksSupplyController : IDisposable
                 return;
             }
 
-            _logger.LogInformation("Picking item for {AddonName}", parentAddon->NameString);
+            _logger.LogInformation("Picking item for {AddonName}", parentName);
             AtkValue* selectSlot = stackalloc AtkValue[]
             {
                 new() { Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int, Int = 0 },
@@ -176,14 +182,14 @@ internal sealed class CraftworksSupplyController : IDisposable
             addonContextIconMenu->FireCallback(5, selectSlot);
             addonContextIconMenu->Close(true);
 
-            if (parentAddon->NameString == "BankaCraftworksSupply")
+            if (parentName == "BankaCraftworksSupply")
             {
                 _framework.RunOnTick(InteractWithBankaCraftworksSupply, TimeSpan.FromMilliseconds(50));
             }
         }
         else
         {
-            _logger.LogTrace("Ignoring contextmenu event for {AddonName}", parentAddon->NameString);
+            _logger.LogTrace("Ignoring contextmenu event for {AddonName}", parentName);
         }
     }
 }

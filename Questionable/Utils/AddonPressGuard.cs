@@ -176,6 +176,13 @@ internal static unsafe class AddonPressGuard
     ///     視窗名稱從實例自己讀（給只拿得到 addon id、拿不到名稱的呼叫端用，例如
     ///     <c>AgentSatisfactionSupply</c> / <c>AgentRecipeNote</c> 那兩條路徑）。
     /// </summary>
+    /// <remarks>
+    ///     🔴🔴 名稱一定要走 <see cref="AddonUtils.ReadAddonName" /> 這種<b>有界</b>讀法，
+    ///     <b>不可以</b>用 CS 產生的 <c>NameString</c>（無上限的 null-terminated 掃描）：
+    ///     這支守衛被呼叫的時機正好是「這扇窗可能正在關閉」，
+    ///     在判定安全<b>之前</b>先對它做無界讀取，等於守衛自己去踩它要防的那顆雷。
+    ///     除了偏移 0x8 那 32 個 byte 的固定欄位之外，位址一樣不解任何二級指標。
+    /// </remarks>
     internal static bool TryBeginPress(AtkUnitBase* addon, string pressKey = "",
         int escapeFrames = DefaultEscapeFrames)
     {
@@ -184,7 +191,7 @@ internal static unsafe class AddonPressGuard
             return false;
         }
 
-        return TryBeginPress(addon->NameString, (nint)addon, pressKey, escapeFrames);
+        return TryBeginPress(AddonUtils.ReadAddonName(addon), (nint)addon, pressKey, escapeFrames);
     }
 
     /// <summary>
