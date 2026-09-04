@@ -24,7 +24,7 @@ namespace Questionable.External;
 /// 是<b>記名</b>的 refcount：我們只放開自己那一把，不會影響別人，也完全不碰使用者的開關。
 /// </para>
 /// <para>
-/// 🔴 <b>租約會逾時</b>（提供端上限 60 分鐘），而 Questionable 一趟可以跑好幾個小時
+/// 🔴 <b>租約會逾時</b>（提供端上限 5 分鐘），而 Questionable 一趟可以跑好幾個小時
 /// ⇒ 必須定期續約，並且<b>把續約的回傳值當真</b>：回 <see langword="false"/> 代表那把已經
 /// 不在了（逾時、或使用者按了 YesAlready 的「強制解除鎖定」），要<b>重新取得</b>，
 /// 不能繼續假設自己還壓著。
@@ -41,15 +41,20 @@ internal sealed class YesAlreadyIpc : IDisposable
     /// <summary>租約登記的名字，會出現在 YesAlready 的 log 與設定視窗。</summary>
     private const string LeaseOwner = "Questionable";
 
-    /// <summary>每次取得／續約時要求的租期。提供端硬性上限就是 60 分鐘，這裡直接要滿。</summary>
+    /// <summary>每次取得／續約時要求的租期（5 分鐘）＝提供端的硬性上限。</summary>
     /// <remarks>
-    /// 🔑 要滿的理由是<b>續約只當保險</b>：萬一續約整條路壞掉，我們仍然有一小時的緩衝，
-    /// 而不是 10 分鐘（提供端的預設值）就讓 YesAlready 醒過來搶按窗。
+    /// 🔑 全艦隊的壓制租約時間政策統一成「租 5 分鐘、每 30 秒續約」（AutoRetainer 那套
+    /// 本來就是這個值）。取捨是：租期短 ⇒ 我們當掉或被卸載時，使用者最多等 5 分鐘
+    /// YesAlready 就自己恢復；續約間隔留 10 倍餘裕 ⇒ 要連續漏掉 9 次心跳才會真的過期。
+    /// <para>
+    /// 🔴 這個值<b>不可以</b>大於提供端的上限：提供端是<b>夾值不是拒絕</b>，要多了只會
+    /// 被靜默砍短，續約反而會來不及。
+    /// </para>
     /// </remarks>
-    private const int LeaseMilliseconds = 3_600_000;
+    private const int LeaseMilliseconds = 300_000;
 
-    /// <summary>續約間隔（5 分鐘），遠小於 <see cref="LeaseMilliseconds"/>。</summary>
-    private const int RenewIntervalMilliseconds = 300_000;
+    /// <summary>續約間隔（30 秒），是 <see cref="LeaseMilliseconds"/> 的十分之一。</summary>
+    private const int RenewIntervalMilliseconds = 30_000;
 
     private static readonly EzIPCDisposalToken[] _disposalTokens = EzIPC.Init(typeof(YesAlreadyIpc), "YesAlready", SafeWrapper.IPCException);
     [EzIPC("IsPluginEnabled")] public static readonly Func<bool> IsPluginEnabled;
