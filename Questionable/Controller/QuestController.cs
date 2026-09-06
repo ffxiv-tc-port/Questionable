@@ -248,12 +248,51 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
     public event AutomationTypeChangedEventHandler? AutomationTypeChanged;
 
+    /// <summary>
+    /// 持 <see cref="_progressLock"/> 時產生的一行輸出。<c>ILogger</c> 最後落到 Dalamud 的 Serilog sink，
+    /// 那邊自己有鎖、還會做檔案 I/O ——在鎖裡呼叫等於把 <c>_progressLock</c> 的持有時間綁在磁碟上。
+    /// 所以鎖內只把「等級／訊息模板／參數」記下來，出鎖之後才真的寫出去。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 <b>刻意是純資料</b>，寫入放在 <see cref="EmitPending"/>：這樣「鎖內可達的成員」裡不存在
+    /// 任何會寫記錄的東西，之後改碼也不容易不小心繞回去。
+    /// <para>
+    /// <paramref name="ChatMessage"/> 不是 <see langword="null"/> 時代表這一則是要印到聊天視窗的
+    /// （<c>_chatGui.Print</c>）而不是寫進記錄檔；兩種放在同一個清單裡，原本的先後順序才保得住。
+    /// </para>
+    /// </remarks>
+    private readonly record struct PendingLog(
+        LogLevel Level,
+        string Template,
+        object?[] Args,
+        string? ChatMessage);
+
+    /// <summary>把鎖內記下來的訊息寫出去。<b>必須在 <see cref="_progressLock"/> 放掉之後才呼叫。</b></summary>
+    private void EmitPending(List<PendingLog> pending)
+    {
+        foreach(PendingLog entry in pending)
+        {
+            if (entry.ChatMessage is { } chatMessage)
+            {
+                _chatGui.Print(chatMessage, CommandHandler.MessageTag, CommandHandler.TagColor);
+            }
+            else
+            {
+                _logger.Log(entry.Level, entry.Template, entry.Args);
+            }
+        }
+
+        pending.Clear();
+    }
+
     public void Reload()
     {
+        // 見 <see cref="PendingLog"/>：這一行原本是鎖內的第一個敘述，訊息是常數、也不看任何
+        // 鎖保護的狀態 ⇒ 直接搬到取鎖之前。等級、文字、觸發條件與先後順序全部不變。
+        _logger.LogInformation("Reload, resetting curent quest progress");
+
         lock(_progressLock)
         {
-            _logger.LogInformation("Reload, resetting curent quest progress");
-
             ResetInternalState();
             ResetAutoRefreshState();
 
@@ -370,9 +409,12 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             && CurrentQuest is { Sequence: 0, Step: 0 } or { Sequence: 0, Step: 255 }
             && DateTime.Now >= CurrentQuest.StepProgress.StartedAt.AddSeconds(15))
         {
+            // 見 <see cref="PendingLog"/>：原本是鎖內的第一個敘述，訊息是常數、也不看任何
+            // 鎖保護的狀態 ⇒ 搬到取鎖之前，先後順序完全不變。
+            _logger.LogWarning("Quest accept apparently didn't work out, resetting progress");
+
             lock(_progressLock)
             {
-                _logger.LogWarning("Quest accept apparently didn't work out, resetting progress");
                 CurrentQuest.SetStep(0);
             }
 
@@ -524,6 +566,28 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
     private void UpdateCurrentQuest()
     {
+        List<PendingLog> pending = [];
+        try
+        {
+            UpdateCurrentQuestLocked(pending);
+        }
+        finally
+        {
+            // 出鎖之後才寫（<c>lock</c> 自己的 <c>Monitor.Exit</c> 在內層的 finally，一定先跑）。
+            // ⚠️ 這個鎖裡還有別的元件（Stop／CheckNextTasks／ExecuteNextStep／QuestRegistry…）
+            // 自己在寫記錄，那些沒有被延後 ⇒ 這裡延後的幾行相對於它們會往後挪；
+            // 延後的這幾行彼此之間的先後順序不變。
+            EmitPending(pending);
+        }
+    }
+
+    /// <summary><see cref="UpdateCurrentQuest"/> 持鎖的那一段。</summary>
+    /// <remarks>
+    /// 🔴 這裡面持有 <see cref="_progressLock"/>：要寫的東西一律 <c>pending.Add</c>，
+    /// 不要直接呼叫 <c>_logger</c> 或 <c>_chatGui</c>。
+    /// </remarks>
+    private void UpdateCurrentQuestLocked(List<PendingLog> pending)
+    {
         lock(_progressLock)
         {
             DebugState = null;
@@ -565,8 +629,9 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
                 if (!canUseNextQuest)
                 {
-                    _logger.LogInformation("Next quest {QuestId} accepted or completed",
-                        NextQuest.Quest.Id);
+                    pending.Add(new PendingLog(LogLevel.Information,
+                        "Next quest {QuestId} accepted or completed",
+                        [NextQuest.Quest.Id], null));
 
                     if (AutomationType == EAutomationType.SingleQuestA)
                     {
@@ -574,7 +639,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                         AutomationType = EAutomationType.SingleQuestB;
                     }
 
-                    _logger.LogDebug("Started: {StartedQuest}", StartedQuest?.Quest.Id);
+                    pending.Add(new PendingLog(LogLevel.Debug, "Started: {StartedQuest}",
+                        [StartedQuest?.Quest.Id], null));
                     NextQuest = null;
                 }
             }
@@ -637,7 +703,9 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                             return;
                         }
 
-                        _logger.LogInformation("No current quest, resetting data [CQI: {CurrrentQuestData}], [CQ: {QuestData}], [MSQ: {MsqData}]", _questFunctions.GetCurrentQuestInternal(true), _questFunctions.GetCurrentQuest(), _questFunctions.GetMainScenarioQuest());
+                        pending.Add(new PendingLog(LogLevel.Information,
+                            "No current quest, resetting data [CQI: {CurrrentQuestData}], [CQ: {QuestData}], [MSQ: {MsqData}]",
+                            [_questFunctions.GetCurrentQuestInternal(true), _questFunctions.GetCurrentQuest(), _questFunctions.GetMainScenarioQuest()], null));
                         StartedQuest = null;
                         Stop("Resetting current quest");
                     }
@@ -652,21 +720,25 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                         _questFunctions.IsQuestComplete(StartedQuest.Quest.Id))
                     {
                         ElementId questId = StartedQuest.Quest.Id;
-                        _logger.LogInformation("Reached stopping point (quest: {QuestId})", questId);
-                        _chatGui.Print($"Completed quest '{StartedQuest.Quest.Info.Name}', which is configured as a stopping point.", CommandHandler.MessageTag, CommandHandler.TagColor);
+                        pending.Add(new PendingLog(LogLevel.Information,
+                            "Reached stopping point (quest: {QuestId})", [questId], null));
+                        pending.Add(new PendingLog(LogLevel.None, string.Empty, [],
+                            $"Completed quest '{StartedQuest.Quest.Info.Name}', which is configured as a stopping point."));
                         StartedQuest = null;
                         Stop($"Stopping point [{questId}] reached");
                     }
                     else if (_questRegistry.TryGetQuest(currentQuestId, out Quest? quest))
                     {
                         _highlightObject.SetHighlight([]);
-                        _logger.LogInformation("New quest: {QuestName}", quest.Info.Name);
+                        pending.Add(new PendingLog(LogLevel.Information, "New quest: {QuestName}",
+                            [quest.Info.Name], null));
                         StartedQuest = new(quest, currentSequence);
 #if DEBUG
                         if (_configuration.Advanced.OpenEditor)
                         {
                             (bool success, string msg) = _questRegistry.OpenEditor(StartedQuest.Quest.Info);
-                            _logger.LogDebug($"OpenEditor {success}: {msg}");
+                            pending.Add(new PendingLog(LogLevel.Debug,
+                                $"OpenEditor {success}: {msg}", [], null));
                         }
 #endif
 
@@ -674,16 +746,17 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                         {
                             if (PlayerState.Instance()->CurrentLevel < quest.Info.Level)
                             {
-                                _logger.LogInformation(
+                                pending.Add(new PendingLog(LogLevel.Information,
                                     "Stopping automation, player level ({PlayerLevel}) < quest level ({QuestLevel}",
-                                    PlayerState.Instance()->CurrentLevel, quest.Info.Level);
+                                    [PlayerState.Instance()->CurrentLevel, quest.Info.Level], null));
                                 Stop("Quest level too high", true);
                             }
                             else
                             {
                                 if (AutomationType == EAutomationType.SingleQuestB)
                                 {
-                                    _logger.LogInformation("Single quest is finished");
+                                    pending.Add(new PendingLog(LogLevel.Information,
+                                        "Single quest is finished", [], null));
                                     AutomationType = EAutomationType.Manual;
                                 }
 
@@ -693,7 +766,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                     }
                     else if (StartedQuest != null)
                     {
-                        _logger.LogInformation("No active quest anymore? Not sure what happened...");
+                        pending.Add(new PendingLog(LogLevel.Information,
+                            "No active quest anymore? Not sure what happened...", [], null));
                         StartedQuest = null;
                         Stop("No active Quest", true);
                     }
@@ -804,31 +878,75 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
     public void IncreaseStepCount(ElementId? questId, int? sequence, bool shouldContinue = false)
     {
+        List<PendingLog> pending = [];
+        bool stepped;
+        try
+        {
+            stepped = IncreaseStepCountLocked(questId, sequence, pending);
+        }
+        finally
+        {
+            // 出鎖之後才寫，提早結束的路徑也會經過這裡。這個鎖裡沒有別的元件在寫記錄，
+            // 所以延後之後的先後順序與原本完全一樣；下面 ExecuteNextStep() 產生的記錄
+            // 仍然排在這幾行之後。
+            EmitPending(pending);
+        }
+
+        if (!stepped)
+        {
+            return;
+        }
+
+        using IDisposable? scope = _logger.BeginScope("IncStepCt");
+        if (shouldContinue && AutomationType != EAutomationType.Manual)
+        {
+            ExecuteNextStep();
+        }
+    }
+
+    /// <summary><see cref="IncreaseStepCount"/> 持鎖的那一段。</summary>
+    /// <param name="pending">要寫的記錄一律加進這裡，由呼叫端出鎖之後才寫出去。</param>
+    /// <returns>
+    /// <see langword="false"/>＝原本那兩個提早 <c>return</c> 的路徑（沒有真的增加步數）。
+    /// </returns>
+    /// <remarks>
+    /// 🔴 這裡面持有 <see cref="_progressLock"/>：不要直接呼叫 <c>_logger</c> 或 <c>_chatGui</c>。
+    /// <para>
+    /// <see cref="SkipLocked"/> 直接呼叫這一支（而不是 <see cref="IncreaseStepCount"/>），
+    /// 因為它自己已經持有同一把鎖——走公開那支的話，延後的記錄會在鎖還握著的時候被寫出去。
+    /// 它原本傳的 <c>shouldContinue</c> 就是預設的 <see langword="false"/>，
+    /// 所以少掉的那段（<c>BeginScope</c> ＋ 不會成立的 <c>if</c>）沒有任何可觀察的作用。
+    /// </para>
+    /// </remarks>
+    private bool IncreaseStepCountLocked(ElementId? questId, int? sequence, List<PendingLog> pending)
+    {
         lock(_progressLock)
         {
             (QuestSequence? seq, QuestStep? step, bool _) = GetNextStep();
             if (CurrentQuest == null || seq == null || step == null)
             {
-                _logger.LogWarning("Unable to retrieve next quest step, not increasing step count");
-                return;
+                pending.Add(new PendingLog(LogLevel.Warning,
+                    "Unable to retrieve next quest step, not increasing step count", [], null));
+                return false;
             }
 
             if (questId != null && CurrentQuest.Quest.Id != questId)
             {
-                _logger.LogWarning(
+                pending.Add(new PendingLog(LogLevel.Warning,
                     "Ignoring 'increase step count' for different quest (expected {ExpectedQuestId}, but we are at {CurrentQuestId}",
-                    questId, CurrentQuest.Quest.Id);
-                return;
+                    [questId, CurrentQuest.Quest.Id], null));
+                return false;
             }
 
             if (sequence != null && seq.Sequence != sequence.Value)
             {
-                _logger.LogWarning(
+                pending.Add(new PendingLog(LogLevel.Warning,
                     "Ignoring 'increase step count' for different sequence (expected {ExpectedSequence}, but we are at {CurrentSequence}",
-                    sequence, seq.Sequence);
+                    [sequence, seq.Sequence], null));
             }
 
-            _logger.LogInformation("Increasing step count from {CurrentValue}", CurrentQuest.Step);
+            pending.Add(new PendingLog(LogLevel.Information,
+                "Increasing step count from {CurrentValue}", [CurrentQuest.Step], null));
             if (CurrentQuest.Step + 1 < seq.Steps.Count)
             {
                 CurrentQuest.SetStep(CurrentQuest.Step + 1);
@@ -841,11 +959,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             ResetAutoRefreshState();
         }
 
-        using IDisposable? scope = _logger.BeginScope("IncStepCt");
-        if (shouldContinue && AutomationType != EAutomationType.Manual)
-        {
-            ExecuteNextStep();
-        }
+        return true;
     }
 
     internal void AbandonQuest(QuestId questId)
@@ -1220,6 +1334,25 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
     public void Skip(ElementId elementId, byte currentQuestSequence)
     {
+        List<PendingLog> pending = [];
+        try
+        {
+            SkipLocked(elementId, currentQuestSequence, pending);
+        }
+        finally
+        {
+            EmitPending(pending);
+        }
+    }
+
+    /// <summary><see cref="Skip"/> 持鎖的那一段。</summary>
+    /// <remarks>
+    /// 🔴 這裡面持有 <see cref="_progressLock"/>：要寫的東西一律 <c>pending.Add</c>。
+    /// ⚠️ 同一個鎖裡的 <c>Stop</c> 沒有被延後（它用 <c>BeginScope</c> 把 label 併進輸出，
+    /// 延後就會掉那一段前綴＝改到內容），所以它的那行仍然先出現——與改動前的順序相同。
+    /// </remarks>
+    private void SkipLocked(ElementId elementId, byte currentQuestSequence, List<PendingLog> pending)
+    {
         lock(_progressLock)
         {
             if (_taskQueue.CurrentTaskExecutor?.CurrentTask is ISkippableTask)
@@ -1241,13 +1374,13 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                 if (_taskQueue.AllTasksComplete)
                 {
                     Stop("Skip");
-                    IncreaseStepCount(elementId, currentQuestSequence);
+                    IncreaseStepCountLocked(elementId, currentQuestSequence, pending);
                 }
             }
             else
             {
                 Stop("SkipNx");
-                IncreaseStepCount(elementId, currentQuestSequence);
+                IncreaseStepCountLocked(elementId, currentQuestSequence, pending);
             }
         }
     }
