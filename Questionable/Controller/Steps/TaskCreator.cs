@@ -7,6 +7,7 @@ using Questionable.Controller.Steps.Shared;
 using Questionable.Data;
 using Questionable.Model;
 using Questionable.Model.Questing;
+using Questionable.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,10 +19,14 @@ internal sealed class TaskCreator
     TerritoryData territoryData,
     IClientState clientState,
     IChatGui chatGui,
+    IFramework framework,
     ILogger<TaskCreator> logger)
 {
     private readonly IChatGui _chatGui = chatGui;
     private readonly IClientState _clientState = clientState;
+
+    /// <summary>只用來把聊天輸出釘回 framework 執行緒，見 <see cref="ChatGuiExtensions"/>。</summary>
+    private readonly IFramework _framework = framework;
     private readonly ILogger<TaskCreator> _logger = logger;
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private readonly TerritoryData _territoryData = territoryData;
@@ -33,11 +38,14 @@ internal sealed class TaskCreator
         if (quest.Root.Disabled && sequenceNumber.InRange(1, 2, true))
         {
             var reason = (quest.Root.Comment ?? "<no reason specified>").Split('\n', 2)[0];
-            _chatGui.PrintError($"The quest '{quest.Info.Name}' has been marked as Disabled for the following reason: {reason}",
+            // CreateTasks 從 IPC 端點 Questionable.StartQuest／StartSingleQuest 可達
+            //（QuestionableIpc.StartQuest -> QuestController.StartSingleQuest -> ExecuteNextStep -> CreateTasks），
+            // 而 IPC 跑在呼叫端外掛的執行緒上。見 ChatGuiExtensions。
+            _chatGui.PrintErrorOnFrameworkThread(_framework, $"The quest '{quest.Info.Name}' has been marked as Disabled for the following reason: {reason}",
                 CommandHandler.MessageTag, CommandHandler.TagColor);
-            _chatGui.PrintError("We recommend you complete this quest manually, as the provided path may not run successfully.",
+            _chatGui.PrintErrorOnFrameworkThread(_framework, "We recommend you complete this quest manually, as the provided path may not run successfully.",
                 CommandHandler.MessageTag, CommandHandler.TagColor);
-            _chatGui.PrintError("Thank you for your patience as we expand QST's support to include this quest in a future update.",
+            _chatGui.PrintErrorOnFrameworkThread(_framework, "Thank you for your patience as we expand QST's support to include this quest in a future update.",
                 CommandHandler.MessageTag, CommandHandler.TagColor);
         }
 # endif
@@ -45,7 +53,8 @@ internal sealed class TaskCreator
         {
             if (!quest.Root.Disabled)
             {
-                _chatGui.PrintError(
+                _chatGui.PrintErrorOnFrameworkThread(
+                    _framework,
                     $"Path for quest '{quest.Info.Name}' ({quest.Id}) does not contain sequence {sequenceNumber}, please report this: https://github.com/PunishXIV/Questionable/discussions/20",
                     CommandHandler.MessageTag, CommandHandler.TagColor);
             }

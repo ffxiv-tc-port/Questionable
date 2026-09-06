@@ -18,6 +18,7 @@ using Questionable.External;
 using Questionable.Functions;
 using Questionable.Model;
 using Questionable.Model.Questing;
+using Questionable.Utils;
 using Questionable.Windows.ConfigComponents;
 using System;
 using System.Collections.Generic;
@@ -54,6 +55,9 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     private readonly AlliedSocietyQuestFunctions _alliedSocietyQuestFunctions;
     private readonly IChatGui _chatGui;
     private readonly IClientState _clientState;
+
+    /// <summary>只用來把聊天輸出釘回 framework 執行緒，見 <see cref="ChatGuiExtensions"/>。</summary>
+    private readonly IFramework _framework;
     private readonly CombatController _combatController;
     private readonly ICondition _condition;
     private readonly Configuration _configuration;
@@ -118,6 +122,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         QuestData questData,
         IKeyState keyState,
         IChatGui chatGui,
+        IFramework framework,
         ICondition condition,
         IToastGui toastGui,
         Configuration configuration,
@@ -142,6 +147,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         _questData = questData;
         _keyState = keyState;
         _chatGui = chatGui;
+        _framework = framework;
         _condition = condition;
         _toastGui = toastGui;
         _configuration = configuration;
@@ -1290,7 +1296,10 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         catch(Exception e)
         {
             _logger.LogError(e, "Failed to create tasks");
-            _chatGui.PrintError("Failed to start next task sequence, please check /xllog for details.", CommandHandler.MessageTag, CommandHandler.TagColor);
+            // 這個 catch 從 IPC 端點 Questionable.StartQuest／StartSingleQuest 可達
+            //（QuestionableIpc.StartQuest -> StartSingleQuest -> ExecuteNextStep），而 IPC 跑在
+            // 呼叫端外掛的執行緒上。見 ChatGuiExtensions：在 framework 執行緒上就地執行。
+            _chatGui.PrintErrorOnFrameworkThread(_framework, "Failed to start next task sequence, please check /xllog for details.", CommandHandler.MessageTag, CommandHandler.TagColor);
             Stop("Tasks failed to create", true);
         }
     }
@@ -1523,7 +1532,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         catch(Exception e)
         {
             _logger.LogError(e, "Failed to insert quest in priority list");
-            _chatGui.PrintError("Failed to insert quest in priority list, please check /xllog for details.", CommandHandler.MessageTag, CommandHandler.TagColor);
+            // IPC 端點 Questionable.InsertQuestPriority 可達，見 ChatGuiExtensions。
+            _chatGui.PrintErrorOnFrameworkThread(_framework, "Failed to insert quest in priority list, please check /xllog for details.", CommandHandler.MessageTag, CommandHandler.TagColor);
             return false;
         }
     }
@@ -1604,7 +1614,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         }
         else
         {
-            _chatGui.PrintError($"No associated quest ({info.QuestId}).", "Questionable");
+            // IPC 端點 Questionable.StartGathering／StartGatheringComplex 可達，見 ChatGuiExtensions。
+            _chatGui.PrintErrorOnFrameworkThread(_framework, $"No associated quest ({info.QuestId}).", "Questionable");
             return false;
         }
     }
