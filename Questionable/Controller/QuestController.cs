@@ -1425,7 +1425,10 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
         try
         {
-            foreach(ITask task in _taskCreator.CreateTasks(CurrentQuest.Quest, CurrentQuest.Sequence, seq, step))
+            // 🔴 傳 RunOrDefer 進去：工作清單仍然同步算好同步回來（回傳值語意不變），
+            //    只有 CreateTasks 裡的 4 個聊天輸出與 5 行記錄被收進延後清單、出鎖之後才寫。
+            foreach(ITask task in _taskCreator.CreateTasks(CurrentQuest.Quest, CurrentQuest.Sequence, seq, step,
+                RunOrDefer))
             {
                 if (SimulatedQuest != null)
                 {
