@@ -195,7 +195,7 @@ internal sealed class QuestRegistry
         {
             ReloadBatch batch = new() { Sequence = Interlocked.Increment(ref _reloadSequence) };
 
-            _questValidator.Reset();
+            _questValidator.Reset(batch.Sequence);
 
             LoadQuestsFromAssembly(batch);
             LoadQuestsFromProjectDirectory(batch);
@@ -408,9 +408,14 @@ internal sealed class QuestRegistry
         }
     }
 
+    /// <remarks>
+    /// 🔴 驗證本身是<b>背景工作</b>，<see cref="_prepareGate"/> 只序列化「排出去」這個動作
+    /// ⇒ 一定要把批次編號一起帶過去，否則兩批同時在跑時是「誰後寫完誰贏」。
+    /// </remarks>
     private void ValidateQuests(ReloadBatch batch)
     {
-        _questValidator.Validate(batch.Quests.Values.Where(x => x.Source != Quest.ESource.Assembly).ToList());
+        _questValidator.Validate(batch.Quests.Values.Where(x => x.Source != Quest.ESource.Assembly).ToList(),
+            batch.Sequence);
     }
 
     private void LoadQuestFromStream(ReloadBatch batch, string fileName, Stream stream, Quest.ESource source)
