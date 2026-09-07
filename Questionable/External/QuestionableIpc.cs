@@ -174,6 +174,7 @@ internal sealed class QuestionableIpc : IDisposable
         _startGatheringComplex.UnregisterFunc();
         _stop.UnregisterFunc();
         _redoLookup.UnregisterFunc();
+        _redoLookupIndex.UnregisterFunc();
     }
 
     private bool StartQuest(string questId, bool single)
