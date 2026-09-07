@@ -1147,7 +1147,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
         _taskQueue.Reset();
 
-        _combatController.Stop("ClearTasksInternal");
+        _combatController.Stop("ClearTasksInternal", RunOrDefer);
         _gatheringController.Stop("ClearTasksInternal");
     }
 
@@ -1230,8 +1230,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     public void StopAllDueToConditionFailed(string label, bool needsManualAttention)
     {
         Stop(label, needsManualAttention);
-        _movementController.Stop();
-        _combatController.Stop(label);
+        _movementController.Stop(RunOrDefer);
+        _combatController.Stop(label, RunOrDefer);
         _gatheringController.Stop(label);
     }
 
@@ -1415,8 +1415,12 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             }
         }
 
-        _movementController.Stop();
-        _combatController.Stop("Execute next step");
+        // 🔴 傳 RunOrDefer 進去：這一支從 UpdateCurrentQuestLocked 進來時是持著 _progressLock 的，
+        //    對 vnavmesh 打 Path.Stop、關自動前進、以及那幾行記錄會被收進延後清單、出鎖之後才做；
+        //    狀態重設（ResetPathfinding／Destination／快照）仍然當場同步做。
+        //    不在鎖裡呼叫時 RunOrDefer 就地執行 ⇒ 行為逐字不變。
+        _movementController.Stop(RunOrDefer);
+        _combatController.Stop("Execute next step", RunOrDefer);
         _gatheringController.Stop("Execute next step");
 
         try

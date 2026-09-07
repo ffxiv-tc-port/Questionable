@@ -546,9 +546,43 @@ internal sealed class MovementController
         }
     }
 
-    public void Stop()
+    /// <summary>停止移動。</summary>
+    /// <param name="defer">
+    /// 不是 <see langword="null"/> 時，<b>純副作用的那兩段</b>——對 vnavmesh 打 <c>Path.Stop</c>、
+    /// 以及關掉自動前進——交給它安排；狀態重設（<see cref="ResetPathfinding"/>、
+    /// <see cref="Destination"/>、快照）仍然當場同步做。
+    /// </param>
+    /// <remarks>
+    /// 🔴 <b>為什麼要拆</b>：<c>QuestController.ExecuteNextStep</c> 是持著 <c>_progressLock</c>
+    /// 呼叫這一支的，而 <c>navmeshIpc.Stop()</c> 是跨外掛 IPC（CallGate＝直接方法呼叫）
+    /// ⇒ 在鎖裡打過去等於把 vnavmesh 的鎖排在我們的鎖後面，對方日後長出任何一條回頭呼叫
+    /// Questionable 的路徑就是死鎖。
+    /// <para>
+    /// 🔴 <b>為什麼不能整支延後</b>：<see cref="ResetPathfinding"/> 與 <c>Destination = null</c>
+    /// 會讓「還在不在尋路／移動」翻成 <see langword="false"/>，而<b>同一個鎖裡</b>後面就在判斷
+    /// 這兩件事。整支延後的話那兩個判斷會翻面、提早 <c>return</c>——那是縮小引擎的原子性，
+    /// 不是等價改寫。
+    /// </para>
+    /// <para>
+    /// ⚠️ <c>InputManager.IsAutoRunning()</c> 讀的是遊戲原生狀態、而且決定要不要做事
+    /// ⇒ 那個判斷留在原地，延後的只有「寫一行記錄＋送一個指令」。
+    /// </para>
+    /// <para>
+    /// 📌 <paramref name="defer"/> 不給的時候（UI、指令、<see cref="Dispose"/>、本類別內部的
+    /// 十幾個呼叫點）行為逐字不變：就地依序執行。
+    /// </para>
+    /// </remarks>
+    public void Stop(Action<Action>? defer = null)
     {
-        navmeshIpc.Stop();
+        if (defer != null)
+        {
+            defer(navmeshIpc.Stop);
+        }
+        else
+        {
+            navmeshIpc.Stop();
+        }
+
         ResetPathfinding();
         Destination = null;
 
@@ -557,9 +591,21 @@ internal sealed class MovementController
 
         if (InputManager.IsAutoRunning())
         {
-            logger.LogInformation("Turning off auto-move [stop]");
-            chatFunctions.ExecuteCommand("/automove off");
+            if (defer != null)
+            {
+                defer(TurnOffAutoMove);
+            }
+            else
+            {
+                TurnOffAutoMove();
+            }
         }
+    }
+
+    private void TurnOffAutoMove()
+    {
+        logger.LogInformation("Turning off auto-move [stop]");
+        chatFunctions.ExecuteCommand("/automove off");
     }
 
     public sealed record DestinationData
