@@ -806,7 +806,16 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             }
             else
             {
-                (ElementId? currentQuestId, currentSequence, MainScenarioQuestState msqState) = _questFunctions.GetCurrentQuest(allowNewMsq: AutomationType != EAutomationType.SingleQuestB);
+                // 🔴 用不印東西的那一支：GetCurrentQuest 會直接 _chatGui.Print，而這裡持著 _progressLock。
+                //    提示收進延後清單、出鎖之後才印；去重（同一則 60 秒一次）在 PrintHintThrottled 裡面。
+                (ElementId? currentQuestId, currentSequence, MainScenarioQuestState msqState) =
+                    _questFunctions.GetCurrentQuestWithHint(allowNewMsq: AutomationType != EAutomationType.SingleQuestB,
+                        out string? questHint);
+                if (questHint != null)
+                {
+                    RunOrDefer(() => _questFunctions.PrintHintThrottled(questHint));
+                }
+
                 (ElementId, byte)? priorityQuestOption =
                     ManualPriorityQuests
                         .Where(x => _questFunctions.IsReadyToAcceptQuest(x.Id) || _questFunctions.IsQuestAccepted(x.Id))
@@ -835,7 +844,13 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
                         pending.Add(new PendingLog(LogLevel.Information,
                             "No current quest, resetting data [CQI: {CurrrentQuestData}], [CQ: {QuestData}], [MSQ: {MsqData}]",
-                            [_questFunctions.GetCurrentQuestInternal(true), _questFunctions.GetCurrentQuest(), _questFunctions.GetMainScenarioQuest()], null));
+                            [
+                                _questFunctions.GetCurrentQuestInternal(true),
+                                // ⚠️ 這裡刻意丟掉提示（out _）：上面那次查詢已經在同一幀收下它了，
+                                //    這一行只是診斷用的重查，再印一次是重複。
+                                _questFunctions.GetCurrentQuestWithHint(true, out _),
+                                _questFunctions.GetMainScenarioQuest()
+                            ], null));
                         StartedQuest = null;
                         Stop("Resetting current quest");
                     }
