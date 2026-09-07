@@ -14,7 +14,8 @@ public enum EItemRewardType
     FashionAccessory,
     FolkloreBook,
     UnlockLink,
-    RecipeBook
+    RecipeBook,
+    Coffer
 }
 
 public sealed class ItemRewardDetails(Item item, ElementId elementId)
@@ -32,8 +33,21 @@ public abstract record ItemReward(ItemRewardDetails Item)
     public ElementId ElementId => Item.ElementId;
     public TimeSpan CastTime => Item.CastTime;
     public abstract EItemRewardType Type { get; }
+    // ⚠️ 這一型的鍵是 ItemAction 的「列 id」，不是其他獎勵型別用的 Action 值。
+    // 照 Action 值去查會回 0 件，看起來跟「台服沒有這種道具」一模一樣。
+    // 台服 7.20 實查：符合的任務獎勵寶箱共 236 件（武器箱、各職業裝備箱等）。
+    internal static bool IsValidCoffer(Item item) =>
+        item.ItemAction.RowId is 1085 or 388 or 367 && item.ItemUICategory.RowId is 61;
+
     internal static ItemReward? CreateFromItem(Item item, ElementId elementId)
     {
+        // 🔴 寶箱沒有「已解鎖」的概念，IsUnlocked() 恆為 false，所以預設關
+        // （Advanced.AutoRedeemCoffers），並由 RedeemRewardItems.AttemptedItems 擋無限重試。
+        if (IsValidCoffer(item))
+        {
+            return new CofferReward(new(item, elementId));
+        }
+
         if (item.ItemAction.Value is { } itemAction)
         {
             if (itemAction.Type is 1322)
@@ -168,5 +182,18 @@ public sealed record RecipeBookReward(ItemRewardDetails Item, ushort RecipeBookI
     public override unsafe bool IsUnlocked()
     {
         return PlayerState.Instance()->IsSecretRecipeBookUnlocked(RecipeBookId);
+    }
+}
+
+// 🔴 IsUnlocked() 恆為 false：只要背包裡有就會被判成「該兌換」。
+// 擋住無限重試的是 RedeemRewardItems.AttemptedItems，不是這裡。
+public sealed record CofferReward(ItemRewardDetails Item)
+    : ItemReward(Item)
+{
+    public override EItemRewardType Type => EItemRewardType.Coffer;
+
+    public override bool IsUnlocked()
+    {
+        return false;
     }
 }

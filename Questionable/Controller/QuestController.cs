@@ -1371,6 +1371,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     public void Start(string label)
     {
         using IDisposable? scope = _logger.BeginScope($"Q/{label}");
+        RedeemRewardItems.ResetAttemptedItems();
         AutomationType = EAutomationType.Automatic;
         ExecuteNextStep();
     }
@@ -1378,6 +1379,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     public void StartGatheringQuest(string label)
     {
         using IDisposable? scope = _logger.BeginScope($"GQ/{label}");
+        RedeemRewardItems.ResetAttemptedItems();
         AutomationType = EAutomationType.GatheringOnly;
         ExecuteNextStep();
     }
@@ -1385,6 +1387,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     public void StartSingleQuest(string label)
     {
         using IDisposable? scope = _logger.BeginScope($"SQ/{label}");
+        RedeemRewardItems.ResetAttemptedItems();
         AutomationType = EAutomationType.SingleQuestA;
         ExecuteNextStep();
     }
@@ -1392,6 +1395,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     public void StartSingleStep(string label)
     {
         using IDisposable? scope = _logger.BeginScope($"SS/{label}");
+        RedeemRewardItems.ResetAttemptedItems();
         AutomationType = EAutomationType.Manual;
         ExecuteNextStep();
     }
