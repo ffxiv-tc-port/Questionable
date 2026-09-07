@@ -297,14 +297,33 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         // 鎖保護的狀態 ⇒ 直接搬到取鎖之前。等級、文字、觸發條件與先後順序全部不變。
         _logger.LogInformation("Reload, resetting curent quest progress");
 
-        lock(_progressLock)
+        // 🔴 檔案列舉、JSON 解析、驗證全部搬到 _progressLock 外面 —— 那把鎖每一個 framework tick
+        //    都會被 UpdateCurrentQuest 拿去，而原本這一整段是在它裡面跑的。序列化改由 QuestRegistry
+        //    自己那把「只在重新載入這條路徑上會被取」的閘門負責（卡住重試計時器在 framework 執行緒、
+        //    使用者按下重新載入在繪製執行緒，兩邊可以同時進來）。
+        QuestRegistry.ReloadBatch registryReload = _questRegistry.PrepareReload();
+        bool published = false;
+        try
         {
-            ResetInternalState();
-            ResetAutoRefreshState();
+            lock(_progressLock)
+            {
+                ResetInternalState();
+                ResetAutoRefreshState();
 
-            _questRegistry.Reload();
-            _singlePlayerDutyConfigComponent.Reload();
-            _alliedSocietyQuestFunctions.Reload();
+                // 鎖裡只剩「把準備好的登錄換上去」這幾行常數時間的參照指派。
+                published = _questRegistry.PublishReload(registryReload);
+                _singlePlayerDutyConfigComponent.Reload();
+                _alliedSocietyQuestFunctions.Reload();
+            }
+        }
+        finally
+        {
+            // 🔴 記錄、Reloaded 事件、跨外掛的 IPC 廣播一律在鎖外：Reloaded 的訂閱端會再做一次完整的
+            //    檔案系統列舉，而 SendMessage 是同步跑在我們這條執行緒上的、別的外掛的碼。
+            // ⚠️ 有一處先後順序變了：Reloaded 事件與 IPC 廣播原本排在
+            //    SinglePlayerDutyConfigComponent.Reload() 之前，現在排在它之後。兩邊互不相依
+            //    （前者讀任務登錄、後者也讀任務登錄，都在替換之後），訂閱端看到的狀態只會更完整。
+            _questRegistry.EmitReloadSideEffects(registryReload, published);
         }
     }
 
