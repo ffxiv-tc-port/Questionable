@@ -11,7 +11,8 @@ public enum EItemRewardType
     Minion,
     OrchestrionRoll,
     TripleTriadCard,
-    FashionAccessory
+    FashionAccessory,
+    FolkloreBook
 }
 
 public sealed class ItemRewardDetails(Item item, ElementId elementId)
@@ -46,6 +47,11 @@ public abstract record ItemReward(ItemRewardDetails Item)
             if (itemAction.Type is 20086)
             {
                 return new FashionAccessoryReward(new(item, elementId), item.ItemAction.Value.Data[0]);
+            }
+
+            if (itemAction.Type is 4107)
+            {
+                return new FolkloreBookReward(new(item, elementId), (ushort)item.ItemAction.Value.Data[0]);
             }
         }
         else if (item.AdditionalData.GetValueOrDefault<Orchestrion>() is { } orchestrionRoll)
@@ -114,5 +120,16 @@ public sealed record FashionAccessoryReward(ItemRewardDetails Item, uint Accesso
     public override unsafe bool IsUnlocked()
     {
         return PlayerState.Instance()->IsOrnamentUnlocked(AccessoryId);
+    }
+}
+
+public sealed record FolkloreBookReward(ItemRewardDetails Item, ushort FolkloreBookId)
+    : ItemReward(Item)
+{
+    public override EItemRewardType Type => EItemRewardType.FolkloreBook;
+
+    public override unsafe bool IsUnlocked()
+    {
+        return PlayerState.Instance()->IsFolkloreBookUnlocked(FolkloreBookId);
     }
 }
