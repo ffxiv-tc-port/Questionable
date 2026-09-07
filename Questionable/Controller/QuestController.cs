@@ -923,13 +923,17 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                 return;
             }
 
-            if (_movementController.IsPathfinding)
+            // 🔴 讀的是快照不是即時值：IsPathRunning 的 getter 是一次跨外掛 IPC，而這裡持著
+            //    _progressLock。快照由 DalamudInitializer 在同一幀、進到這裡之前取樣，
+            //    而 MovementController.Stop()／ResetPathfinding() 會當場把它歸零
+            //    ⇒ 「鎖內停止移動之後再判斷」的結果與改動前相同。見 IsPathRunningSnapshot。
+            if (_movementController.IsPathfindingSnapshot)
             {
                 DebugState = "Pathfinding is running";
                 return;
             }
 
-            if (_movementController.IsPathRunning)
+            if (_movementController.IsPathRunningSnapshot)
             {
                 DebugState = "Path is running";
                 return;

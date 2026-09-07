@@ -110,6 +110,13 @@ internal sealed class DalamudInitializer : IDisposable
         //    vnavmesh 的路徑容許值忽然跳回別人的值」，而且全程零訊息。
         _navmeshIpc.UpdateLease();
 
+        // 🔴 必須留在 _questController.Update() 之前：那一支會持著 _progressLock 判斷
+        //    「還在不在尋路／移動」，而那兩個值原本是現讀 vnavmesh 的 IPC（等於在我們每幀
+        //    都會拿的鎖裡面跑別的外掛的碼）。改成這裡每幀先取樣一次、鎖內只讀快照。
+        //    這一行被移到 _questController.Update() 後面的話語意只會退化成「晚一幀」，
+        //    仍然安全，但就不是同幀的值了。
+        _movementController.RefreshNavmeshSnapshot();
+
         _partyWatchDog.Update();
         _questController.Update();
 
