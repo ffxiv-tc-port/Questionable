@@ -1117,12 +1117,6 @@ internal sealed unsafe class QuestFunctions
                && classJobLevels[classJobRow.ExpArrayIndex] > 0;
     }
 
-    public bool IsJobUnlocked(Job classJob)
-    {
-        ClassJob classJobRow = _dataManager.GetExcelSheet<ClassJob>().GetRow((uint)classJob);
-        return IsClassJobUnlocked((Job)classJobRow.ClassJobParent.RowId);
-    }
-
     public GrandCompany GetGrandCompany()
     {
         return (GrandCompany)PlayerState.Instance()->GrandCompany;
