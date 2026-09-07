@@ -12,7 +12,9 @@ public enum EItemRewardType
     OrchestrionRoll,
     TripleTriadCard,
     FashionAccessory,
-    FolkloreBook
+    FolkloreBook,
+    UnlockLink,
+    RecipeBook
 }
 
 public sealed class ItemRewardDetails(Item item, ElementId elementId)
@@ -52,6 +54,19 @@ public abstract record ItemReward(ItemRewardDetails Item)
             if (itemAction.Type is 4107)
             {
                 return new FolkloreBookReward(new(item, elementId), (ushort)item.ItemAction.Value.Data[0]);
+            }
+
+            // 表情、面妝樣式之類的「學會就永久解鎖」道具。台服 7.20 實查有 9 件是真的任務獎勵，
+            // 例：任務 68620「公主節的大聲援」→ 道具 22378「演技教材·聲援小藍」→ ItemAction 列 1550 → Data[0] 381。
+            if (itemAction.Type is 2633)
+            {
+                return new UnlockLinkReward(new(item, elementId), (ushort)item.ItemAction.Value.Data[0]);
+            }
+
+            // 秘傳書。台服 7.20 沒有任何任務把它列為獎勵，屬前瞻相容。
+            if (itemAction.Type is 2136)
+            {
+                return new RecipeBookReward(new(item, elementId), (ushort)item.ItemAction.Value.Data[0]);
             }
         }
         else if (item.AdditionalData.GetValueOrDefault<Orchestrion>() is { } orchestrionRoll)
@@ -131,5 +146,27 @@ public sealed record FolkloreBookReward(ItemRewardDetails Item, ushort FolkloreB
     public override unsafe bool IsUnlocked()
     {
         return PlayerState.Instance()->IsFolkloreBookUnlocked(FolkloreBookId);
+    }
+}
+
+public sealed record UnlockLinkReward(ItemRewardDetails Item, ushort UnlockLinkId)
+    : ItemReward(Item)
+{
+    public override EItemRewardType Type => EItemRewardType.UnlockLink;
+
+    public override unsafe bool IsUnlocked()
+    {
+        return UIState.Instance()->IsUnlockLinkUnlocked(UnlockLinkId);
+    }
+}
+
+public sealed record RecipeBookReward(ItemRewardDetails Item, ushort RecipeBookId)
+    : ItemReward(Item)
+{
+    public override EItemRewardType Type => EItemRewardType.RecipeBook;
+
+    public override unsafe bool IsUnlocked()
+    {
+        return PlayerState.Instance()->IsSecretRecipeBookUnlocked(RecipeBookId);
     }
 }
