@@ -32,7 +32,18 @@ internal static class RedeemRewardItems
     private static readonly ConcurrentDictionary<uint, int> AttemptedItems = new();
 
     /// <summary>開始一輪新的自動化時清空，讓使用者「重新跑一次」等於「再試一次」。</summary>
-    internal static void ResetAttemptedItems() => AttemptedItems.Clear();
+    /// <remarks>
+    /// 登出時也會清一次（<c>QuestController.ClearRedeemAttemptsOnLogout</c>）：這張表的鍵只有道具 id，
+    /// 而「用不掉」的理由多半是角色自己的（已經學過那個表情、背包滿、等級不夠），
+    /// 換角色之後前一個角色的結論不該繼續套用在新角色身上。
+    /// </remarks>
+    /// <returns>清掉的筆數。</returns>
+    internal static int ResetAttemptedItems()
+    {
+        int cleared = AttemptedItems.Count;
+        AttemptedItems.Clear();
+        return cleared;
+    }
 
     /// <summary>記下這一疊已經動過手了。只有寶箱會呼叫。</summary>
     internal static void RecordAttempt(uint itemId, int countBeforeUse) =>
