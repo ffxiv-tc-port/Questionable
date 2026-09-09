@@ -238,8 +238,36 @@ internal abstract class MiniTaskController<T> : IDisposable
         LogTasksAfterInterruption();
     }
 
+    /// <summary>
+    /// 收到「劇情被中斷。」／「目前狀態下無法進行該操作。」時，插一個重試緩衝進佇列、把先前的工作重做一次。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 <b>閘門：佇列空的時候什麼都不做。</b>那兩則錯誤訊息是<b>全域</b>的，遊戲只要彈出來就會走到這裡，
+    /// 而 <see cref="OnErrorToast"/> 是外掛一載入就掛上去的、不看自動化有沒有在跑。少了這道閘門，
+    /// <b>閒置狀態下一則與我們無關的錯誤訊息就會把 <c>WaitAtEnd.WaitDelay</c> 插進空佇列</b>，
+    /// 憑空生出一個「幽靈任務」，而它會連帶讓三件事發生：
+    /// <list type="bullet">
+    /// <item><c>IsRunning</c>（＝<c>!AllTasksComplete</c>）變成 <see langword="true"/>，於是
+    /// <c>InteractionUiController.ShouldHandleUiInteractions</c> 也跟著成立 ——
+    /// <b>使用者根本沒有按開始，Questionable 卻會去按 Yes/No、選單、過場選項那些視窗</b>。</item>
+    /// <item><c>YesAlreadyIpc</c> 看到 <c>IsRunning</c> 就去拿 YesAlready 的壓制租約 ——
+    /// 為了一個不存在的任務把別的外掛的按窗能力關掉。</item>
+    /// <item>接下來只要登出一次，<c>Stop("Logged out")</c> 的守衛（<c>IsRunning || …</c>）就成立，
+    /// 記錄檔寫一行「Stopping automatic questing」—— 明明什麼都沒有在跑。</item>
+    /// </list>
+    /// 📌 語意上也對得起方法名字：「重做先前的工作」在沒有先前工作時本來就無事可做。
+    /// 🔑 <c>QuestController</c> 對另一條中斷路徑（<c>HandleInterruption</c>）早就有等價的守衛
+    /// （<c>if (!IsRunning) return;</c>）；這裡補的是同一件事在「錯誤訊息」這條路上漏掉的那一半。
+    /// ⚠️ 這道閘門對真的在跑的情況是 no-op：只要有工作在跑，<c>AllTasksComplete</c> 就是
+    /// <see langword="false"/>（它的定義是「沒有目前執行器<b>而且</b>佇列是空的」）。
+    /// </remarks>
     private void InterruptWithoutCombat()
     {
+        if (_taskQueue.AllTasksComplete)
+        {
+            return;
+        }
+
         if (_taskQueue.CurrentTaskExecutor is not SinglePlayerDuty.WaitSinglePlayerDutyExecutor)
         {
             _logger.LogWarning("Interrupted, attempting to redo previous tasks (not in combat)");

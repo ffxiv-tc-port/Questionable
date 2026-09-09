@@ -487,6 +487,20 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
         if (!_clientState.IsLoggedIn)
         {
+            // 🔑 這一行的存在理由是「把真的被登出砍掉的自動化，跟什麼都沒在跑的登出分開」。
+            //    在 2026-09-10 之前這兩者在記錄檔上長得一模一樣（都只有一行
+            //    「Stopping automatic questing」），而實機 19 份記錄檔裡 77 次 Stop/Logged out
+            //    全部都是後者（幽靈任務，見 MiniTaskController.InterruptWithoutCombat 的註解），
+            //    足以讓人得出「多角色切換一直在打斷跑任務」這個完全相反的結論。
+            //    ⚠️ 條件與 Stop() 的守衛「刻意」寫成同一個：那個 if 本身就是狀態邊緣
+            //    （下一幀 IsRunning 已是 false、AutomationType 已是 Manual）⇒ 一次登出只念一行。
+            if (IsRunning || AutomationType != EAutomationType.Manual)
+            {
+                _logger.LogInformation(
+                    "Logout interrupted active questing (automation type {AutomationType}, current task {CurrentTask}, {QueuedTaskCount} more task(s) queued); questing does NOT resume by itself, start it again after logging back in",
+                    AutomationType, _taskQueue.CurrentTaskExecutor?.CurrentTask, _taskQueue.RemainingTasks.Count());
+            }
+
             StopAllDueToConditionFailed("Logged out");
         }
         if (_condition[ConditionFlag.Unconscious])
