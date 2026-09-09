@@ -15,6 +15,20 @@ internal interface IAutoHookIpc
     bool IsPluginEnabled();
 
     /// <summary>
+    /// Gets the AutoHook plugin state as it is <b>actually in effect</b>: the user's own setting with any
+    /// suppression leases held by other plugins applied on top.
+    /// </summary>
+    /// <remarks>
+    /// Ask this one - not <see cref="IsPluginEnabled"/> - when deciding "will AutoHook actually hook for me
+    /// right now". <see cref="IsPluginEnabled"/> remains the right question for "what do I restore
+    /// afterwards": restoring the effective value would hand the user back a <c>false</c> that only ever
+    /// came from somebody else's temporary lease.
+    /// Falls back to <see cref="IsPluginEnabled"/> when AutoHook is absent or too old to expose the endpoint.
+    /// </remarks>
+    /// <returns>Whether AutoHook will actually act right now.</returns>
+    bool IsEffectivePluginEnabled();
+
+    /// <summary>
     /// Sets the AutoHook plugin state.
     /// </summary>
     /// <param name="enabled">Whether to enable the AutoHook plugin.</param>

@@ -66,9 +66,23 @@ internal static class Fish
         QuestFunctions questFunctions,
         ILogger<DoFish> logger) : TaskExecutor<FishTask>, IStoppableTaskExecutor
     {
+        /// <summary>
+        /// 結束時要還原成什麼。
+        /// 🔴 這裡<b>刻意</b>問的是使用者自己的值（<c>GetPluginState</c>）而不是實際生效的值：
+        /// 拿疊加後的值當快照，會在別的外掛壓制期間拍到 <see langword="false"/>，
+        /// 之後 <see cref="Cleanup"/> 就把那個 <see langword="false"/>「還」給使用者，
+        /// 永久改掉他自己設定頁裡勾的東西。
+        /// </summary>
         private readonly bool _wasAutoHookEnabled = autoHookIpc.IsPluginEnabled();
+
         private bool _started;
         private bool _cleanupDone;
+
+        /// <summary>我們是否動過 AutoHook 的啟用開關（動過就一定要還原，即使還沒開始釣）。</summary>
+        private bool _touchedAutoHook;
+
+        /// <summary>「被別的外掛壓制中」這一行是否已經寫過（同一段壓制只寫一次，不要每秒洗版）。</summary>
+        private bool _suppressionLogged;
 
         protected override bool Start()
         {
@@ -84,20 +98,11 @@ internal static class Fish
                 return false;
             }
 
-            if (!_wasAutoHookEnabled)
-            {
-                // AutoHook is required for this task to work. Enable it if it's not already enabled.
-                var canEnableAutoHook = autoHookIpc.SetPluginEnabled(enabled: true);
-                if (!canEnableAutoHook)
-                {
-                    const string errorText =
-                        "AutoHook is required for fishing but could not be enabled. Please install or enable AutoHook.";
-                    logger.LogWarning("{ErrorText}", errorText);
-                    if (!sendNotificationExecutor.Start(new SendNotification.Task(EInteractionType.Fish, errorText)))
-                        chatGui.PrintError(errorText, CommandHandler.MessageTag, CommandHandler.TagColor);
-                    throw new TaskException(errorText);
-                }
-            }
+            // AutoHook is required for this task to work.
+            // 🔴 回 false ＝這一輪先不要拋竿，但任務要留著（回 true 讓 MiniTaskController 保留執行器），
+            //    Update() 每秒會再進來重試一次。回 false 會被當成「這個任務被跳過」而直接丟掉。
+            if (!EnsureAutoHookRunning())
+                return true;
 
             // Only create and select the anonymous preset if we haven't started yet. This prevents us from creating multiple presets.
             if (!_started)
@@ -158,7 +163,9 @@ internal static class Fish
 
         public void StopNow()
         {
-            if (_started)
+            // 🔴 _touchedAutoHook 也要算：被別的外掛壓制而停在「已經幫使用者打開、但還沒拋竿」時
+            //    _started 仍是 false，只看 _started 會讓那次打開永遠還不回去。
+            if (_started || _touchedAutoHook)
                 Cleanup();
         }
 
@@ -173,6 +180,74 @@ internal static class Fish
             QuestProgressInfo? questWork = questFunctions.GetQuestProgressInfo(Task.Quest.Id);
             return questWork != null &&
                    QuestWorkUtils.MatchesQuestWork(Task.CompletionQuestVariablesFlags, questWork);
+        }
+
+        /// <summary>
+        /// 確認 AutoHook 現在<b>真的會動</b>。回 <see langword="false"/> ⇒ 這一輪不要 <c>/ahstart</c>，
+        /// 等下一次重試。
+        /// </summary>
+        /// <remarks>
+        /// 🔴 <b>「現在該不該自己動手」問的是實際生效的狀態</b>（使用者的值疊上別的外掛的暫停租約），
+        /// 不是建構時拍下的那張使用者快照 <see cref="_wasAutoHookEnabled"/>。
+        /// 只問使用者的值時，別的外掛（例如 GatherBuddyReborn 自動採集期間持有的
+        /// <c>AutoHook.AcquireSuppressionFor</c> 租約）壓著的期間會得到 <see langword="true"/>，
+        /// 於是我們以為 AutoHook 會幫忙上鉤 —— 實際上 AutoHook 的 <c>OnFrameworkUpdate</c> 讀的是
+        /// 疊加後的值並且直接早退，竿子拋出去沒有任何人上鉤，釣魚任務就這樣<b>完全靜默</b>地卡住。
+        /// <para>
+        /// 🔴 <b>被壓制時 <c>SetPluginState</c> 幫不上忙</b>：那支只寫使用者自己的值，壓不掉別人的租約
+        /// （AutoHook 的租約是「只能往停手的方向壓」）。所以那種情況唯一正確的動作是<b>等</b>，
+        /// 順便寫一行 <c>Information</c> 讓使用者知道是誰擋著。
+        /// </para>
+        /// </remarks>
+        private bool EnsureAutoHookRunning()
+        {
+            if (autoHookIpc.IsEffectivePluginEnabled())
+            {
+                if (_suppressionLogged)
+                {
+                    logger.LogInformation("AutoHook 的暫停租約已經放開，繼續釣魚任務。");
+                    _suppressionLogged = false;
+                }
+
+                return true;
+            }
+
+            // 使用者自己開著、卻沒有實際生效 ⇒ 一定是別的外掛持有暫停租約。只能等它放開或逾時。
+            if (autoHookIpc.IsPluginEnabled())
+                return LogSuppressedAndWait();
+
+            // 使用者自己把 AutoHook 關著 —— 這是我們可以處理的，幫他打開（Cleanup 會還原成使用者的值）。
+            if (!autoHookIpc.SetPluginEnabled(enabled: true))
+            {
+                const string errorText =
+                    "AutoHook is required for fishing but could not be enabled. Please install or enable AutoHook.";
+                logger.LogWarning("{ErrorText}", errorText);
+                if (!sendNotificationExecutor.Start(new SendNotification.Task(EInteractionType.Fish, errorText)))
+                    chatGui.PrintError(errorText, CommandHandler.MessageTag, CommandHandler.TagColor);
+                throw new TaskException(errorText);
+            }
+
+            _touchedAutoHook = true;
+
+            // 打開之後再問一次：若同時還有別人的租約壓著，打開使用者的值一樣不會生效。
+            return autoHookIpc.IsEffectivePluginEnabled() || LogSuppressedAndWait();
+        }
+
+        /// <summary>寫一行「被壓制中」並回 <see langword="false"/>；同一段壓制只寫一次。</summary>
+        /// <remarks>
+        /// 🔴 等級是 <c>Information</c>：這條路徑原本<b>完全靜默</b>，使用者只會看到釣魚任務不動了，
+        /// log 裡一個字都沒有。
+        /// </remarks>
+        private bool LogSuppressedAndWait()
+        {
+            if (!_suppressionLogged)
+            {
+                logger.LogInformation(
+                    "AutoHook 目前被其他外掛的暫停租約壓制中，本次不接手釣魚；等租約放開或逾時後會自動繼續。");
+                _suppressionLogged = true;
+            }
+
+            return false;
         }
 
         private void Cleanup()
@@ -193,6 +268,7 @@ internal static class Fish
 
             _cleanupDone = true;
             _started = false;
+            _touchedAutoHook = false;
         }
     }
 

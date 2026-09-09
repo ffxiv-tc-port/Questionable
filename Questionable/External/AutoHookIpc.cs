@@ -9,6 +9,13 @@ internal sealed class AutoHookIpc : IAutoHookIpc
     private readonly ILogger<AutoHookIpc> _logger;
 
     [EzIPC("GetPluginState")] private readonly Func<bool> _isPluginEnabled;
+
+    /// <summary>
+    /// 實際生效的啟用狀態（使用者的值疊上目前的暫停租約）。
+    /// 🔴 舊版 AutoHook 沒有這支端點，呼叫會擲 <c>IpcNotReadyError</c> ——
+    /// <see cref="IsEffectivePluginEnabled"/> 會乾淨地退回 <see cref="IsPluginEnabled"/>。
+    /// </summary>
+    [EzIPC("GetEffectivePluginState")] private readonly Func<bool> _isEffectivePluginEnabled;
     [EzIPC("SetPluginState")] private readonly Action<bool> _setPluginEnabled;
     [EzIPC("GetAutoStartFishing")] private readonly Func<bool> _getAutoStartFishing;
     [EzIPC("SetAutoStartFishing")] private readonly Action<bool> _setAutoStartFishing;
@@ -62,6 +69,18 @@ internal sealed class AutoHookIpc : IAutoHookIpc
 
     public bool IsPluginEnabled() =>
         IpcInvoke.SafeFunc(() => _isPluginEnabled(), fallback: false, _logger, "Unable to get AutoHook plugin state");
+
+    public bool IsEffectivePluginEnabled()
+    {
+        // null ＝ 這支端點現在不可用（AutoHook 沒安裝／還沒載入完／版本舊到沒有 GetEffectivePluginState）。
+        // 🔴 不能直接拿 false 當 fallback：那會讓「AutoHook 沒回應」與「AutoHook 正被別人壓制」
+        //    變成同一個答案，呼叫端就分不出「幫他打開就好」與「打開也沒用，只能等」。
+        // 📌 IpcInvoke 攔的是 IpcError 與 TargetInvocationException（提供端自己擲的例外會被
+        //    CallGate 的 DynamicInvoke 包成後者，catch (IpcError) 攔不到）。
+        bool? effective = IpcInvoke.SafeFunc<bool?>(() => _isEffectivePluginEnabled(), fallback: null, _logger,
+            "Unable to get AutoHook effective plugin state");
+        return effective ?? IsPluginEnabled();
+    }
 
     public bool SetPluginEnabled(bool enabled)
     {
