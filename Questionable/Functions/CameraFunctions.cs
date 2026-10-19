@@ -4,11 +4,15 @@ using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Numerics;
 namespace Questionable.Functions;
+
+// NOTE: the old hand-rolled `CameraEx` struct is gone on purpose (same fix as vnavmesh/Lifestream on
+// TC 7.20). Its 0x130-based FieldOffsets were the TC 7.15 layout — TC 7.20 shifted the native struct
+// +0x10, so FFXIVClientStructs.FFXIV.Client.Game.Camera (verified against the API13 pin) now exposes
+// exactly the fields we need; use it directly and let the pin track layout changes for us.
 
 internal sealed unsafe class CameraFunctions : IDisposable
 {
@@ -16,8 +20,13 @@ internal sealed unsafe class CameraFunctions : IDisposable
     private readonly IObjectTable _objectTable;
 
     private readonly bool IgnoreUserInput = true; // if true - override even if user tries to change camera orientation, otherwise override only if user does nothing
-    [Signature("48 8B C4 53 48 81 EC ?? ?? ?? ?? 44 0F 29 50 ??")]
-    private Hook<RMICameraDelegate> _rmiCameraHook = null!;
+    // The TC 7.15-era call-site signature (E8 ?? ?? ?? ?? EB 05 E8 ?? ?? ?? ?? 44 0F 28 4C 24 ??)
+    // scans zero hits on TC 7.20 (the call site's trailing movaps changed register allocation), which
+    // silently disabled camera auto-facing. This is the function-prologue signature vnavmesh verified
+    // on TC 7.20 (matches exactly once). Kept fallible, same as vnavmesh, so a future signature
+    // drift only disables camera auto-facing instead of crashing the whole plugin.
+    [Signature("48 8B C4 53 48 81 EC ?? ?? ?? ?? 44 0F 29 50 ??", Fallibility = Fallibility.Fallible)]
+    private Hook<RMICameraDelegate>? _rmiCameraHook;
     private float DesiredAltitude;
     private float DesiredAzimuth;
 
@@ -26,13 +35,22 @@ internal sealed unsafe class CameraFunctions : IDisposable
         _logger = logger;
         gameInteropProvider.InitializeFromAttributes(this);
         _objectTable = objectTable;
+        if (_rmiCameraHook == null)
+        {
+            _logger.LogWarning("RMICamera signature not found - camera auto-facing disabled");
+        }
     }
 
     public bool Enabled
     {
-        get => _rmiCameraHook.IsEnabled;
+        get => _rmiCameraHook?.IsEnabled ?? false;
         set
         {
+            if (_rmiCameraHook == null)
+            {
+                return;
+            }
+
             if (value)
             {
                 _rmiCameraHook.Enable();
@@ -46,7 +64,7 @@ internal sealed unsafe class CameraFunctions : IDisposable
 
     public void Dispose()
     {
-        _rmiCameraHook.Dispose();
+        _rmiCameraHook?.Dispose();
     }
 
     private static float Deg2Rad(int degrees)
@@ -82,19 +100,54 @@ internal sealed unsafe class CameraFunctions : IDisposable
         DesiredAltitude = Deg2Rad(-30);
     }
 
+    // fail-closed: a detour is called directly by native code, so a managed exception escaping it
+    // unwinds through native frames with no handler. Everything on top of Original() runs inside a
+    // try; the degraded behaviour is "don't override" (Original has already run).
+    // NOTE: this does NOT protect against AccessViolationException; it catches managed exceptions,
+    // e.g. the InvalidOperationException ClientStructs members throw when a signature stops resolving.
+    private long _detourErrors;
+    private DateTime _lastDetourErrorLog = DateTime.MinValue;
+
+    private void OnDetourError(Exception ex)
+    {
+        ++_detourErrors;
+        // this runs per frame - never log unthrottled. Information: a diagnostic users are asked to report.
+        DateTime now = DateTime.UtcNow;
+        if (now - _lastDetourErrorLog < TimeSpan.FromSeconds(30))
+        {
+            return;
+        }
+
+        _lastDetourErrorLog = now;
+        _logger.LogInformation(ex,
+            "Camera auto-facing threw, leaving the game's own camera input alone (total {Count})",
+            _detourErrors);
+    }
+
     private void RMICameraDetour(Camera* self, int inputMode, float speedH, float speedV)
     {
-        _rmiCameraHook.Original(self, inputMode, speedH, speedV);
-        if (IgnoreUserInput || inputMode == 0) // let user override...
+        _rmiCameraHook!.OriginalDisposeSafe(self, inputMode, speedH, speedV);
+        try
         {
-            float dt = Framework.Instance()->FrameDeltaTime;
-            float deltaH = Normalized(DesiredAzimuth - self->DirH);
-            float deltaV = Normalized(DesiredAltitude - self->DirV);
-            float maxH = Deg2Rad(180);
-            float maxV = Deg2Rad(180);
-            self->InputDeltaH = Math.Clamp(deltaH, -maxH, maxH);
-            self->InputDeltaV = Math.Clamp(deltaV, -maxV, maxV);
-            Enabled = false;
+            if (self == null)
+            {
+                return;
+            }
+
+            if (IgnoreUserInput || inputMode == 0) // let user override...
+            {
+                float deltaH = Normalized(DesiredAzimuth - self->DirH);
+                float deltaV = Normalized(DesiredAltitude - self->DirV);
+                float maxH = Deg2Rad(180);
+                float maxV = Deg2Rad(180);
+                self->InputDeltaH = Math.Clamp(deltaH, -maxH, maxH);
+                self->InputDeltaV = Math.Clamp(deltaV, -maxV, maxV);
+                Enabled = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            OnDetourError(ex);
         }
     }
 

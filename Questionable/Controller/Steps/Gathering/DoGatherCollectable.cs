@@ -69,13 +69,13 @@ internal static class DoGatherCollectable
             {
                 if (gameGui.TryGetAddonByName("GatheringMasterpiece", out AtkUnitBase* atkUnitBase))
                 {
-                    atkUnitBase->FireCallbackInt(1);
+                    AddonPressGuard.PressCallbackInt("GatheringMasterpiece", atkUnitBase, 1);
                     return ETaskResult.StillRunning;
                 }
 
                 if (gameGui.TryGetAddonByName("Gathering", out atkUnitBase))
                 {
-                    atkUnitBase->FireCallbackInt(-1);
+                    AddonPressGuard.PressCallbackInt("Gathering", atkUnitBase, -1);
                     return ETaskResult.TaskComplete;
                 }
             }
@@ -139,10 +139,23 @@ internal static class DoGatherCollectable
             return ETaskResult.StillRunning;
         }
 
+        /// <remarks>
+        /// 🔴 <c>TryGetAddonByName</c> 只保證 addon 指標非 null,**保證不了 <c>AtkValues</c>** ——
+        /// 那是指標欄位,addon 剛 setup／正在拆解時是 null,陣列長度另存在 <c>AtkValuesCount</c>。
+        /// null 時解參考是攔不到的 AccessViolation;長度不足時索引 62／63 讀的是堆積垃圾,
+        /// 會被 <c>GetNextActions</c> 當成真的完整度／收藏價值拿去比大小並放技能。
+        /// <para>失敗語意:回 <see langword="null"/>,與「視窗不在」完全相同 ——
+        /// 呼叫端本來就有處理 <see langword="null"/> 的路徑(不進場、下一幀重試)。</para>
+        /// </remarks>
         private unsafe NodeCondition? GetNodeCondition()
         {
             if (gameGui.TryGetAddonByName("GatheringMasterpiece", out AtkUnitBase* atkUnitBase))
             {
+                if (atkUnitBase == null || atkUnitBase->AtkValues == null || atkUnitBase->AtkValuesCount <= 63)
+                {
+                    return null;
+                }
+
                 AtkValue* atkValues = atkUnitBase->AtkValues;
                 return new(
                     atkValues[13].UInt,

@@ -257,15 +257,13 @@ public unsafe readonly struct ExtendedBaseParam(ExcelPage page, uint offset, uin
 {
     private const int ParamCount = 23;
 
+    public ExcelPage ExcelPage => page;
+    public uint RowOffset => offset;
     public uint RowId => row;
     public BaseParam BaseParam => new(page, offset, row);
 
     public Collection<ushort> EquipSlotCategoryPct =>
         new(page, offset, offset, &EquipSlotCategoryPctCtor, ParamCount);
-
-    ExcelPage IExcelRow<ExtendedBaseParam>.ExcelPage => page;
-
-    uint IExcelRow<ExtendedBaseParam>.RowOffset => offset;
 
     private static ushort EquipSlotCategoryPctCtor(ExcelPage page, uint parentOffset, uint offset, uint i)
     {

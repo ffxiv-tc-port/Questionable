@@ -69,7 +69,8 @@ internal static class AetheryteShortcut
         IChatGui chatGui,
         ICondition condition,
         AetheryteData aetheryteData,
-        ExtraConditionUtils extraConditionUtils) : TaskExecutor<Task>
+        ExtraConditionUtils extraConditionUtils,
+        IDataManager dataManager) : TaskExecutor<Task>
     {
         private DateTime _continueAt;
         private bool _teleported;
@@ -258,8 +259,9 @@ internal static class AetheryteShortcut
 
             if (!aetheryteFunctions.IsAetheryteUnlocked(Task.TargetAetheryte))
             {
-                chatGui.PrintError($"Aetheryte {Task.TargetAetheryte} is not unlocked.", CommandHandler.MessageTag, CommandHandler.TagColor);
-                throw new TaskException("Aetheryte is not unlocked");
+                throw new ManualActionRequiredException(
+                    $"Aetheryte {Task.TargetAetheryte} is not unlocked",
+                    $"還沒有開啟過乙太之光「{GetAetheryteName(Task.TargetAetheryte)}」，無法傳送過去，已停下自動任務。請先手動前往開啟後，再按開始繼續。");
             }
 
             ProgressContext =
@@ -275,6 +277,14 @@ internal static class AetheryteShortcut
                 chatGui.Print("Unable to teleport to aetheryte.", CommandHandler.MessageTag, CommandHandler.TagColor);
                 throw new TaskException("Unable to teleport to aetheryte");
             }
+        }
+
+        /// <summary>遊戲表裡的地名（台服即繁中）；查不到時退回列舉名。</summary>
+        private string GetAetheryteName(EAetheryteLocation aetheryte)
+        {
+            string? name = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>()
+                .GetRowOrDefault((uint)aetheryte)?.PlaceName.ValueNullable?.Name.ToString();
+            return string.IsNullOrEmpty(name) ? aetheryte.ToString() : name;
         }
 
         public override bool WasInterrupted()

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Dalamud.Plugin.Services;
+using Microsoft.Extensions.Logging;
 using Questionable.Functions;
 using Questionable.Model;
 using Questionable.Model.Common;
@@ -41,15 +42,16 @@ internal static class AethernetShard
     (
         AetheryteFunctions aetheryteFunctions,
         GameFunctions gameFunctions,
+        ICondition condition,
         ILogger<DoAttune> logger) : TaskExecutor<Attune>
     {
+        private readonly InteractionRetry _retry = new();
+
         protected override bool Start()
         {
             if (!aetheryteFunctions.IsAetheryteUnlocked(Task.AetheryteLocation))
             {
                 logger.LogInformation("Attuning to aethernet shard {AethernetShard}", Task.AetheryteLocation);
-                ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
-                    gameFunctions.InteractWith((uint)Task.AetheryteLocation, ObjectKind.Aetheryte));
                 return true;
             }
 
@@ -59,9 +61,19 @@ internal static class AethernetShard
 
         public override ETaskResult Update()
         {
-            return aetheryteFunctions.IsAetheryteUnlocked(Task.AetheryteLocation)
-                ? ETaskResult.TaskComplete
-                : ETaskResult.StillRunning;
+            if (aetheryteFunctions.IsAetheryteUnlocked(Task.AetheryteLocation))
+            {
+                return ETaskResult.TaskComplete;
+            }
+
+            if (_retry.ShouldSend(condition, logger, Task))
+            {
+                ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
+                    gameFunctions.InteractWith((uint)Task.AetheryteLocation, ObjectKind.Aetheryte));
+                _retry.OnSent();
+            }
+
+            return ETaskResult.StillRunning;
         }
 
         public override bool ShouldInterruptOnDamage()

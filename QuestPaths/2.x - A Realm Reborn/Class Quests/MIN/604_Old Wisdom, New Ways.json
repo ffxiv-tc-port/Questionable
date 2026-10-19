@@ -43,7 +43,6 @@
               "ItemCount": 15
             }
           ],
-          "AetheryteShortcut": "Middle La Noscea - Summerford Farms",
           "SkipConditions": {
             "StepIf": {
               "Item": {

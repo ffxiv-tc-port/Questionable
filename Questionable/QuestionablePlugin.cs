@@ -1,8 +1,11 @@
 ﻿using Dalamud.Extensions.MicrosoftLogging;
+using Dalamud.Game;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
+using ECommons.LanguageHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller;
@@ -14,6 +17,7 @@ using Questionable.Controller.Steps.Common;
 using Questionable.Controller.Steps.Gathering;
 using Questionable.Controller.Steps.Interactions;
 using Questionable.Controller.Steps.Movement;
+using Questionable.Controller.Steps.Fishing;
 using Questionable.Controller.Steps.Shared;
 using Questionable.Controller.Utils;
 using Questionable.Data;
@@ -29,8 +33,6 @@ using Questionable.Windows.JournalComponents;
 using Questionable.Windows.QuestComponents;
 using Questionable.Windows.Utils;
 using System;
-using WrathCombo.API;
-using WrathError = WrathCombo.API.WrathIPCWrapper.ErrorType;
 using Action = Questionable.Controller.Steps.Interactions.Action;
 
 namespace Questionable;
@@ -47,7 +49,6 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         IDataManager dataManager,
         ISigScanner sigScanner,
         IObjectTable objectTable,
-        IPlayerState playerState,
         IPluginLog pluginLog,
         ICondition condition,
         IChatGui chatGui,
@@ -62,7 +63,17 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         ArgumentNullException.ThrowIfNull(pluginInterface);
         ArgumentNullException.ThrowIfNull(chatGui);
         ECommonsMain.Init(pluginInterface, this, Module.DalamudReflector);
-        WrathIPCWrapper.Init(pluginInterface, WrathError.IPCNotReady | WrathError.Unexpected);
+        // 「正在關閉中的視窗不要再按第二次」的閘門（AddonPressGuard）。
+        // 訂閱越早越好：同一個外掛內部的 Framework.Update 多播委派包在單一 try/catch 裡，
+        // 排在前面的處理常式擲例外會讓後面所有處理常式那個 tick 完全不被呼叫 ——
+        // 守衛的時鐘停住就等於逃生口永不到期。
+        AddonPressGuard.EnsureClock();
+        // 讓「呼叫了對方沒有的 IPC 方法」不再完全靜默。
+        // 訂閱越早越好：事件只在 IPC **呼叫**當下才被查閱，在這裡訂閱就涵蓋往後所有呼叫。
+        EzIpcFailureLog.Enable();
+        Localization.Init(pluginInterface.UiLanguage is "tw" or "zh" or "zh-Hant" or "zh-Hans"
+            ? "ChineseTraditional"
+            : "English");
 
         try
         {
@@ -79,7 +90,6 @@ public sealed class QuestionablePlugin : IDalamudPlugin
             serviceCollection.AddSingleton(dataManager);
             serviceCollection.AddSingleton(sigScanner);
             serviceCollection.AddSingleton(objectTable);
-            serviceCollection.AddSingleton(playerState);
             serviceCollection.AddSingleton(pluginLog);
             serviceCollection.AddSingleton(condition);
             serviceCollection.AddSingleton(chatGui);
@@ -114,8 +124,21 @@ public sealed class QuestionablePlugin : IDalamudPlugin
 
     public void Dispose()
     {
-        _serviceProvider?.Dispose();
-        ECommonsMain.Dispose();
+        // ServiceProvider.Dispose() does not swallow exceptions: one service whose Dispose() throws
+        // aborts disposal of everything after it and, without this try/finally, would skip
+        // ECommonsMain.Dispose() entirely - leaving ECommons' hooks installed for the rest of the
+        // game session (e.g. an IPC call in a service's Dispose() throwing IpcNotReadyError).
+        try
+        {
+            _serviceProvider?.Dispose();
+        }
+        finally
+        {
+            EzIpcFailureLog.Disable();
+            // 必須在 ECommonsMain.Dispose() 之前：之後 Svc 已經清空，拆不掉監聽器。
+            AddonPressGuard.ForceTeardown();
+            ECommonsMain.Dispose();
+        }
     }
 
     private static void AddBasicFunctionsAndData(ServiceCollection serviceCollection)
@@ -137,6 +160,7 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection.AddSingleton<JournalData>();
         serviceCollection.AddSingleton<QuestData>();
         serviceCollection.AddSingleton<TerritoryData>();
+        serviceCollection.AddSingleton<IpcFrameworkGate>();
         serviceCollection.AddSingleton<NavmeshIpc>();
         serviceCollection.AddSingleton<LifestreamIpc>();
         serviceCollection.AddSingleton<ArtisanIpc>();
@@ -148,8 +172,11 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection.AddSingleton<PandorasBoxIpc>();
         serviceCollection.AddSingleton<YesAlreadyIpc>();
         serviceCollection.AddSingleton<StylistIpc>();
+        serviceCollection.AddSingleton<TataruPraiseIpc>();
+        serviceCollection.AddSingleton<IAutoHookIpc, AutoHookIpc>();
 
         serviceCollection.AddSingleton<GearStatsCalculator>();
+        serviceCollection.AddSingleton<IFishingPresetGenerator, FishingPresetGenerator>();
     }
 
     private static void AddTaskFactories(ServiceCollection serviceCollection)
@@ -163,6 +190,7 @@ public sealed class QuestionablePlugin : IDalamudPlugin
             .AddTaskFactoryAndExecutor<RedeemRewardItems.Task, RedeemRewardItems.Factory, RedeemRewardItems.Executor>();
         serviceCollection.AddTaskExecutor<DoGather.Task, DoGather.GatherExecutor>();
         serviceCollection.AddTaskExecutor<DoGatherCollectable.Task, DoGatherCollectable.GatherCollectableExecutor>();
+        serviceCollection.AddTaskFactoryAndExecutor<Fish.FishTask, Fish.Factory, Fish.DoFish>();
         serviceCollection.AddTaskFactoryAndExecutor<SwitchClassJob.Task, SwitchClassJob.Factory,
             SwitchClassJob.SwitchClassJobExecutor>();
         serviceCollection.AddTaskFactoryAndExecutor<CreateGearset.Task, CreateGearset.Factory,
@@ -250,6 +278,8 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection
             .AddTaskExecutor<SinglePlayerDuty.WaitSinglePlayerDuty, SinglePlayerDuty.WaitSinglePlayerDutyExecutor>();
         serviceCollection.AddTaskExecutor<SinglePlayerDuty.DisableAi, SinglePlayerDuty.DisableAiExecutor>();
+        serviceCollection
+            .AddTaskExecutor<SinglePlayerDuty.WaitDutyOutcome, SinglePlayerDuty.WaitDutyOutcomeExecutor>();
         serviceCollection.AddTaskExecutor<SinglePlayerDuty.SetTarget, SinglePlayerDuty.SetTargetExecutor>();
 
         serviceCollection.AddTaskExecutor<WaitCondition.Task, WaitCondition.WaitConditionExecutor>();
@@ -279,6 +309,7 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection.AddSingleton<CombatController>();
         serviceCollection.AddSingleton<GatheringController>();
         serviceCollection.AddSingleton<ContextMenuController>();
+        serviceCollection.AddSingleton<EnableDutyLinkHandler>();
         serviceCollection.AddSingleton<ShopController>();
         serviceCollection.AddSingleton<InterruptHandler>();
 
@@ -294,7 +325,6 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection.AddSingleton<ICombatModule, Mount147Module>();
         serviceCollection.AddSingleton<ICombatModule, ItemUseModule>();
         serviceCollection.AddSingleton<ICombatModule, BossModModule>();
-        serviceCollection.AddSingleton<ICombatModule, WrathComboModule>();
         serviceCollection.AddSingleton<ICombatModule, RotationSolverRebornModule>();
     }
 

@@ -5,7 +5,9 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Lumina.Excel.Sheets;
+using Microsoft.Extensions.Logging;
 using Questionable.Model.Questing;
+using Questionable.Utils;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -16,14 +18,17 @@ internal sealed class ClassJobUtils
 {
     private readonly ReadOnlyDictionary<Job, sbyte> _classJobToExpArrayIndex;
     private readonly Configuration _configuration;
+    private readonly ILogger<ClassJobUtils> _logger;
 
     public readonly ReadOnlyCollection<(Job ClassJob, int Category)> SortedClassJobs;
 
     public ClassJobUtils(
         Configuration configuration,
-        IDataManager dataManager)
+        IDataManager dataManager,
+        ILogger<ClassJobUtils> logger)
     {
         _configuration = configuration;
+        _logger = logger;
 
         _classJobToExpArrayIndex = dataManager.GetExcelSheet<ClassJob>()
             .Where(x => x is { RowId: > 0, ExpArrayIndex: >= 0 })
@@ -150,6 +155,20 @@ internal sealed class ClassJobUtils
             }
         }
 
+        return PickPreferred(jobGearSets);
+    }
+
+    /// <summary>
+    ///     在 <paramref name="candidates"/> 裡挑一個有套組的職業，排序與 Auto 相同（等級→裝等→職能）。
+    /// </summary>
+    /// <returns>沒有任何候選有套組（或讀不到等級）時回 <see cref="Job.ADV"/>。</returns>
+    public Job PickPreferredJob(IReadOnlyCollection<Job> candidates)
+    {
+        return PickPreferred(GetJobGearSets(false).Where(x => candidates.Contains(x.ClassJob)));
+    }
+
+    private static Job PickPreferred(IEnumerable<(Job ClassJob, short Level, short ItemLevel)> jobGearSets)
+    {
         return jobGearSets
             .OrderByDescending(x => x.Level)
             .ThenByDescending(x => x.ItemLevel)
@@ -181,7 +200,7 @@ internal sealed class ClassJobUtils
         for(int i = 0; i < 100; ++i)
         {
             RaptureGearsetModule.GearsetEntry* gearset = gearsetModule->GetGearset(i);
-            if (gearset->Flags.HasFlag(RaptureGearsetModule.GearsetFlag.Exists))
+            if (gearset != null && gearset->Flags.HasFlag(RaptureGearsetModule.GearsetFlag.Exists))
             {
                 Job classJob = (Job)gearset->ClassJob;
                 if (combat && (GameDataAdapter.IsCrafter(classJob) || GameDataAdapter.IsGatherer(classJob)))
@@ -189,7 +208,21 @@ internal sealed class ClassJobUtils
                     continue;
                 }
 
-                short level = playerState->ClassJobLevels[_classJobToExpArrayIndex[classJob]];
+                // 🔴 _classJobToExpArrayIndex 在建構時已濾掉第 0 列與負的 ExpArrayIndex，
+                //    所以查不到就是「這個職業沒有等級欄位」：記一次、跳過，不可以直接索引。
+                if (!_classJobToExpArrayIndex.TryGetValue(classJob, out sbyte expArrayIndex))
+                {
+                    ExpArrayIndexUtils.LogUnknownClassJobOnce((uint)classJob, _logger);
+                    continue;
+                }
+
+                var classJobLevels = playerState->ClassJobLevels;
+                if (!ExpArrayIndexUtils.IsInRange(expArrayIndex, classJobLevels.Length, (uint)classJob, _logger))
+                {
+                    continue;
+                }
+
+                short level = classJobLevels[expArrayIndex];
                 if (level == 0)
                 {
                     continue;

@@ -147,8 +147,11 @@ internal sealed class ContextMenuController : IDisposable
             return;
         }
 
+        // AgentSatisfactionSupply.Instance() 走 [Agent] 產生器，agentModule 還沒配起來時合法回 null，
+        // 裸接 ->IsAgentActive() 等於從位址 0 讀 vtable，是攔不到的 AccessViolation。
+        // null 時的中性退化＝與「代理人未啟用」完全相同：沿用上面算好的 quantityToGather，不覆寫。
         AgentSatisfactionSupply* agentSatisfactionSupply = AgentSatisfactionSupply.Instance();
-        if (agentSatisfactionSupply->IsAgentActive())
+        if (agentSatisfactionSupply != null && agentSatisfactionSupply->IsAgentActive())
         {
             int maxTurnIns = agentSatisfactionSupply->NpcInfo.SatisfactionRank == 1 ? 3 : 6;
             quantityToGather = Math.Min(agentSatisfactionSupply->NpcData.RemainingAllowances,
@@ -161,7 +164,7 @@ internal sealed class ContextMenuController : IDisposable
             lockedReasonn = $"{classJob} not unlocked";
         else if (quantityToGather == 0)
             lockedReasonn = "No allowances";
-        else if (quantityToGather > _gameFunctions.GetFreeInventorySlots())
+        else if (quantityToGather > GameFunctions.GetFreeInventorySlots())
             lockedReasonn = "Inventory full";
         else if (_gameFunctions.IsOccupied())
             lockedReasonn = "Can't be used while interacting";

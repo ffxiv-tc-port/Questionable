@@ -36,16 +36,6 @@
       "Sequence": 2,
       "Steps": [
         {
-          "Position": {
-            "X": 253.34096,
-            "Y": 71.49686,
-            "Z": -241.08495
-          },
-          "TerritoryId": 956,
-          "InteractionType": "WalkTo",
-          "Comment": "Needed for Navmesh"
-        },
-        {
           "DataId": 1038744,
           "Position": {
             "X": 315.4497,

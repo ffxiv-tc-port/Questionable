@@ -10,6 +10,7 @@ using Questionable.External;
 using Questionable.Functions;
 using Questionable.Model;
 using Questionable.Model.Questing;
+using Questionable.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -57,8 +58,10 @@ internal static class Craft
         QuestFunctions questFunctions,
         ArtisanIpc artisanIpc,
         ILogger<DoCraft> logger,
-        QuestController questController) : TaskExecutor<CraftTask>
+        QuestController questController,
+        IChatGui chatGui) : TaskExecutor<CraftTask>
     {
+        private readonly HqCraftShortfallWatch _hqShortfallWatch = new();
         private EItemQuality _itemQuality = EItemQuality.Any;
         private int _previousCount;
         private int _startingItemCount;
@@ -155,17 +158,43 @@ internal static class Craft
                         return ETaskResult.StillRunning;
                     }
 
-                    AtkUnitBase* addon = AtkStage.Instance()->RaptureAtkUnitManager->GetAddonById((ushort)addonId);
+                    // 走守衛版 helper：RaptureAtkUnitManager 為 null 時不會裸解參考。
+                    AtkUnitBase* addon = AddonUtils.GetAddonById(addonId);
                     if (addon != null)
                     {
-                        addon->FireCallbackInt(-1);
+                        // 視窗名稱由實例自己讀:這條路徑只拿得到 AgentRecipeNote 的 addon id。
+                        if (AddonPressGuard.TryBeginPress(addon, "-1"))
+                        {
+                            addon->FireCallbackInt(-1);
+                        }
+
                         return ETaskResult.TaskComplete;
                     }
                 }
                 return ETaskResult.TaskComplete;
             }
 
+            bool requiresHq = _itemQuality == EItemQuality.HQ;
+            if (_hqShortfallWatch.Update(requiresHq, requiresHq && artisanIpc.IsCrafting(), currentCount,
+                    Task.ItemCount, Environment.TickCount64))
+            {
+                NotifyHqShortfall(currentCount);
+            }
+
             return ETaskResult.StillRunning;
+        }
+
+        private unsafe void NotifyHqShortfall(int hqOwned)
+        {
+            int nqOwned = InventoryManager.Instance()->GetInventoryItemCount(Task.ItemId, false, false);
+            string itemName = dataManager.GetExcelSheet<Item>().GetRowOrDefault(Task.ItemId)?.Name.ToString() ??
+                              Task.ItemId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            logger.LogInformation(
+                "HQ craft shortfall after Artisan stopped: quest {QuestId} ({QuestName}), item {ItemId} ({ItemName}), HQ {HqOwned}/{Required}, NQ {NqOwned}",
+                Task.Quest.Id, Task.Quest.Info.Name, Task.ItemId, itemName, hqOwned, Task.ItemCount, nqOwned);
+            chatGui.Print(
+                $"這一步要交高品質成品（{itemName} ×{Task.ItemCount}），目前高品質 {hqOwned}、一般品質 {nqOwned}，Artisan 已停止——請手動補做高品質或停止任務。",
+                CommandHandler.MessageTag, CommandHandler.TagColor);
         }
 
         private EItemQuality GetItemQuality()

@@ -6,24 +6,48 @@ internal sealed class InteractionProgressContext
 {
     private bool _firstUpdateDone;
 
-    private InteractionProgressContext(bool checkSequence, int currentSequence)
+    // 建立時沒觸發新施放：詠唱欄位還是建立當下那一組時，當成上一次施放已完成，
+    // 否則上一次被打斷的殘值會讓這次互動立刻被判成中斷。只在判斷時這樣看，不寫遊戲記憶體。
+    private readonly bool _hasStaleCast;
+    private readonly float _staleCastElapsed;
+    private readonly float _staleCastTotal;
+    private bool _castChangedSinceCreate;
+
+    private InteractionProgressContext(bool checkSequence, int currentSequence, float castElapsed, float castTotal)
     {
         CheckSequence = checkSequence;
         CurrentSequence = currentSequence;
+        _hasStaleCast = !checkSequence;
+        _staleCastElapsed = castElapsed;
+        _staleCastTotal = castTotal;
     }
     public bool CheckSequence { get; private set; }
     public int CurrentSequence { get; private set; }
 
     public static unsafe InteractionProgressContext Create(bool checkSequence)
     {
-        if (!checkSequence)
+        ActionManager* actionManager = ActionManager.Instance();
+        return new(checkSequence, actionManager->LastUsedActionSequence,
+            actionManager->CastTimeElapsed, actionManager->CastTimeTotal);
+    }
+
+    /// <remarks>欄位一旦和建立當下不同（遊戲開始了新的詠唱）就一律回真值，之後回到同一組數字也不再當殘值。</remarks>
+    private unsafe (float Elapsed, float Total) ReadCastTime()
+    {
+        ActionManager* actionManager = ActionManager.Instance();
+        float elapsed = actionManager->CastTimeElapsed;
+        float total = actionManager->CastTimeTotal;
+        if (_hasStaleCast && !_castChangedSinceCreate)
         {
-            // this is a silly hack; we assume that the previous cast was successful
-            // if not for this, we'd instantly be seen as interrupted
-            ActionManager.Instance()->CastTimeElapsed = ActionManager.Instance()->CastTimeTotal;
+            if (elapsed == _staleCastElapsed && total == _staleCastTotal)
+            {
+                return (total, total);
+            }
+
+            _castChangedSinceCreate = true;
         }
 
-        return new(checkSequence, ActionManager.Instance()->LastUsedActionSequence);
+        return (elapsed, total);
     }
 
     private static unsafe (bool, InteractionProgressContext?) FromActionUseInternal(Func<bool> func)
@@ -73,6 +97,8 @@ internal sealed class InteractionProgressContext
 
     public unsafe bool WasSuccessful()
     {
+        // 先讀：每次判斷都要更新「欄位變過沒」，不能被下面的提早 return 跳過。
+        (float elapsed, float total) = ReadCastTime();
         if (CheckSequence)
         {
             if (CurrentSequence != ActionManager.Instance()->LastUsedActionSequence ||
@@ -82,12 +108,12 @@ internal sealed class InteractionProgressContext
             }
         }
 
-        return ActionManager.Instance()->CastTimeElapsed > 0 &&
-               Math.Abs(ActionManager.Instance()->CastTimeElapsed - ActionManager.Instance()->CastTimeTotal) < 0.001f;
+        return elapsed > 0 && Math.Abs(elapsed - total) < 0.001f;
     }
 
     public unsafe bool WasInterrupted()
     {
+        (float elapsed, float total) = ReadCastTime();
         if (CheckSequence)
         {
             if (CurrentSequence == ActionManager.Instance()->LastHandledActionSequence &&
@@ -97,8 +123,7 @@ internal sealed class InteractionProgressContext
             }
         }
 
-        return ActionManager.Instance()->CastTimeElapsed == 0 &&
-               ActionManager.Instance()->CastTimeTotal > 0;
+        return elapsed == 0 && total > 0;
     }
 
     public override string ToString()

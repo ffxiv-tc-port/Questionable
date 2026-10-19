@@ -6,18 +6,22 @@ using Dalamud.Plugin.Services;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller;
 using Questionable.Controller.Utils;
+using Questionable.External;
+using Questionable.Functions;
 using Questionable.Windows;
 using System;
 namespace Questionable;
 
 internal sealed class DalamudInitializer : IDisposable
 {
+    private readonly AlliedSocietyQuestFunctions _alliedSocietyQuestFunctions;
     private readonly Configuration _configuration;
     private readonly ConfigWindow _configWindow;
     private readonly IFramework _framework;
     private readonly HighlightObject _highlightObject;
     private readonly ILogger<DalamudInitializer> _logger;
     private readonly MovementController _movementController;
+    private readonly NavmeshIpc _navmeshIpc;
     private readonly OneTimeSetupWindow _oneTimeSetupWindow;
     private readonly PartyWatchDog _partyWatchDog;
     private readonly IDalamudPluginInterface _pluginInterface;
@@ -31,6 +35,7 @@ internal sealed class DalamudInitializer : IDisposable
         IFramework framework,
         QuestController questController,
         MovementController movementController,
+        NavmeshIpc navmeshIpc,
         WindowSystem windowSystem,
         OneTimeSetupWindow oneTimeSetupWindow,
         QuestWindow questWindow,
@@ -44,12 +49,14 @@ internal sealed class DalamudInitializer : IDisposable
         Configuration configuration,
         HighlightObject highlightObject,
         PartyWatchDog partyWatchDog,
+        AlliedSocietyQuestFunctions alliedSocietyQuestFunctions,
         ILogger<DalamudInitializer> logger)
     {
         _pluginInterface = pluginInterface;
         _framework = framework;
         _questController = questController;
         _movementController = movementController;
+        _navmeshIpc = navmeshIpc;
         _windowSystem = windowSystem;
         _oneTimeSetupWindow = oneTimeSetupWindow;
         _questWindow = questWindow;
@@ -58,6 +65,7 @@ internal sealed class DalamudInitializer : IDisposable
         _configuration = configuration;
         _highlightObject = highlightObject;
         _partyWatchDog = partyWatchDog;
+        _alliedSocietyQuestFunctions = alliedSocietyQuestFunctions;
         _logger = logger;
 
         _windowSystem.AddWindow(oneTimeSetupWindow);
@@ -101,6 +109,17 @@ internal sealed class DalamudInitializer : IDisposable
 
     private void FrameworkUpdate(IFramework framework)
     {
+        // 🔴 放在最前面：vnavmesh 移動租約的續約與逾時交回都靠這一行，而下面任何一支
+        //    Update() 擲例外都會讓它之後的程式碼當幀不執行。漏續約的失效形式是「跑到一半
+        //    vnavmesh 的路徑容許值忽然跳回別人的值」，而且全程零訊息。
+        _navmeshIpc.UpdateLease();
+
+        // 🔴 必須留在 _questController.Update() 之前：那一支會持著 _progressLock 判斷
+        //    「還在不在尋路／移動」，現讀 vnavmesh 的 IPC 等於在我們每幀都會拿的鎖裡面跑別的外掛的碼，
+        //    所以這裡每幀先取樣一次、鎖內只讀快照。移到 _questController.Update() 後面只會退化成
+        //    「晚一幀」，仍然安全。
+        _movementController.RefreshNavmeshSnapshot();
+
         _partyWatchDog.Update();
         _questController.Update();
 
@@ -110,8 +129,14 @@ internal sealed class DalamudInitializer : IDisposable
         }
         catch(MovementController.PathfindingFailedException)
         {
-            _questController.Stop("Pathfinding failed");
+            _questController.RetryAfterRecoverableFailure("Pathfinding failed");
         }
+
+        // 🔴 排在最後、而且在所有鎖外面：AlliedSocietyQuestFunctions 是從 QuestController 持著
+        //    _progressLock 的路徑被呼叫到的，它把要寫的記錄先收進佇列，這裡才真的寫出去。
+        //    放在這裡而不是 QuestController 裡面，是因為 QuestController.Update 在「手動模式、
+        //    沒在跑、視窗關著」時會提早 return，佇列會壓著不寫。
+        _alliedSocietyQuestFunctions.FlushPendingLogs();
     }
 
     private void OnToast(ref SeString message, ref ToastOptions options, ref bool isHandled)

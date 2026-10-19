@@ -86,7 +86,7 @@ internal static class DoGather
                 {
                     if (gatheringController.HasRequestedItems())
                     {
-                        addonGathering->FireCallbackInt(-1);
+                        AddonPressGuard.PressCallbackInt("Gathering", &addonGathering->AtkUnitBase, -1);
                     }
                     else
                     {
@@ -94,15 +94,19 @@ internal static class DoGather
                         if (Task.Request.Collectability > 0)
                         {
                             SlotInfo slot = slots.Single(x => x.ItemId == Task.Request.ItemId);
-                            logger.LogDebug($"Collectible=true, clicking {slot.Index} {slot.ItemId}");
-                            addonGathering->FireCallbackInt(slot.Index);
+                            if (LogGate.DebugEnabled) logger.LogDebug($"Collectible=true, clicking {slot.Index} {slot.ItemId}");
+                            AddonPressGuard.PressCallbackInt("Gathering", &addonGathering->AtkUnitBase, slot.Index, AddonPressGuard.RoutineRePressEscapeFrames);
                         }
                         else
                         {
+                            // 🔴 AtkValues 是指標欄位(addon 剛 setup／正在拆解時為 null),長度另存在 AtkValuesCount。
+                            // 裸讀 [109]/[110] 在 null 時是攔不到的 AccessViolation,長度不足時讀的是堆積垃圾 ——
+                            // 而這兩個值是「完整度」,垃圾值會讓 GetNextActions 依它挑技能。讀不到就當作 0/0
+                            // (與 GatheringMasterpiece 那邊「讀不到 ⇒ 不進場」同語意)。
                             NodeCondition nodeCondition = new(
-                                addonGathering->AtkValues[109].UInt,
-                                addonGathering->AtkValues[110].UInt);
-                            logger.LogDebug($"NodeCondition: {nodeCondition.CurrentIntegrity}/{nodeCondition.MaxIntegrity}");
+                                ECommons.GenericHelpers.GetAtkValueUInt(&addonGathering->AtkUnitBase, 109),
+                                ECommons.GenericHelpers.GetAtkValueUInt(&addonGathering->AtkUnitBase, 110));
+                            if (LogGate.DebugEnabled) logger.LogDebug($"NodeCondition: {nodeCondition.CurrentIntegrity}/{nodeCondition.MaxIntegrity}");
 
                             if (_actionQueue != null && _actionQueue.TryPeek(out EAction nextAction))
                             {
@@ -119,7 +123,7 @@ internal static class DoGather
                             if (_actionQueue == null)
                             {
                                 logger.LogDebug("No actions returned by GetNextActions");
-                                addonGathering->FireCallbackInt(-1);
+                                AddonPressGuard.PressCallbackInt("Gathering", &addonGathering->AtkUnitBase, -1);
                                 return ETaskResult.TaskComplete;
                             }
                             else if (_actionQueue.Count == 0)
@@ -136,11 +140,11 @@ internal static class DoGather
 
                                 if (slot != null)
                                 {
-                                    addonGathering->FireCallbackInt(slot.Index);
+                                    AddonPressGuard.PressCallbackInt("Gathering", &addonGathering->AtkUnitBase, slot.Index, AddonPressGuard.RoutineRePressEscapeFrames);
                                 }
                                 else
                                 {
-                                    addonGathering->FireCallbackInt(-1);
+                                    AddonPressGuard.PressCallbackInt("Gathering", &addonGathering->AtkUnitBase, -1);
                                 }
                             }
                         }
@@ -152,6 +156,13 @@ internal static class DoGather
                 ? ETaskResult.TaskComplete
                 : ETaskResult.StillRunning;
         }
+
+        /// <summary>
+        /// SearchNodeById 找不到 id 時回 null，找到的節點型別不是文字節點時
+        /// GetAsAtkTextNode() 也回 null。兩層一起擋掉。
+        /// </summary>
+        private static unsafe AtkTextNode* AsTextNode(AtkResNode* node)
+            => node == null ? null : node->GetAsAtkTextNode();
 
         private unsafe List<SlotInfo> ReadSlots(AddonGathering* addonGathering)
         {
@@ -167,30 +178,49 @@ internal static class DoGather
 
                 AtkComponentCheckBox* atkCheckbox = addonGathering->GatheredItemComponentCheckbox[i].Value;
 
-                AtkTextNode* atkGatheringChance = atkCheckbox->UldManager.SearchNodeById(10)->GetAsAtkTextNode();
-                if (!int.TryParse(atkGatheringChance->NodeText.ToString(), out int gatheringChance))
-                {
-                    gatheringChance = 0;
-                }
+                // 🔴 這條鏈上每一跳都合法回 null：向量元素本身、SearchNodeById 找不到 id、
+                // 以及節點型別不符時的 GetAsAtkTextNode()／GetAsAtkComponentNode()；任一跳沒判就是攔不到的 AccessViolation。
+                // 失敗語意刻意選「保留 slot，欄位退回預設值（0／0／1）」而不是 continue 丟掉整個 slot：
+                // GetNextActions 對備選道具用的是 slots.Single(...)，少一個 slot 會直接擲例外。
+                // 這是每影格讀採集面板的路徑，不寫 log。
+                int gatheringChance = 0;
+                int boonChance = 0;
+                int quantity = 1;
 
-                AtkTextNode* atkBoonChance = atkCheckbox->UldManager.SearchNodeById(16)->GetAsAtkTextNode();
-                if (!int.TryParse(atkBoonChance->NodeText.ToString(), out int boonChance))
+                if (atkCheckbox != null)
                 {
-                    boonChance = 0;
-                }
+                    AtkTextNode* atkGatheringChance = AsTextNode(atkCheckbox->UldManager.SearchNodeById(10));
+                    if (atkGatheringChance != null &&
+                        int.TryParse(atkGatheringChance->NodeText.ToString(), out int parsedGatheringChance))
+                    {
+                        gatheringChance = parsedGatheringChance;
+                    }
 
-                AtkComponentNode* atkImage = atkCheckbox->UldManager.SearchNodeById(31)->GetAsAtkComponentNode();
-                AtkTextNode* atkQuantity = atkImage->Component->UldManager.SearchNodeById(7)->GetAsAtkTextNode();
-                if (!atkQuantity->IsVisible() || !int.TryParse(atkQuantity->NodeText.ToString(), out int quantity))
-                {
-                    quantity = 1;
+                    AtkTextNode* atkBoonChance = AsTextNode(atkCheckbox->UldManager.SearchNodeById(16));
+                    if (atkBoonChance != null &&
+                        int.TryParse(atkBoonChance->NodeText.ToString(), out int parsedBoonChance))
+                    {
+                        boonChance = parsedBoonChance;
+                    }
+
+                    AtkResNode* imageResNode = atkCheckbox->UldManager.SearchNodeById(31);
+                    AtkComponentNode* atkImage = imageResNode == null ? null : imageResNode->GetAsAtkComponentNode();
+                    if (atkImage != null && atkImage->Component != null)
+                    {
+                        AtkTextNode* atkQuantity = AsTextNode(atkImage->Component->UldManager.SearchNodeById(7));
+                        if (atkQuantity != null && atkQuantity->IsVisible() &&
+                            int.TryParse(atkQuantity->NodeText.ToString(), out int parsedQuantity))
+                        {
+                            quantity = parsedQuantity;
+                        }
+                    }
                 }
 
                 SlotInfo slot = new(i, itemId, gatheringChance, boonChance, quantity);
                 slots.Add(slot);
             }
 
-            logger.LogDebug("Slots: {Slots}", string.Join(", ", slots));
+            if (LogGate.DebugEnabled) logger.LogDebug("Slots: {Slots}", string.Join(", ", slots));
             return slots;
         }
 
@@ -265,13 +295,13 @@ internal static class DoGather
                 else if (_usedLuck)
                 {
                     // we still can't find the item, if this node has been hit at least once we just close it
-                    logger.LogDebug("Didn't find item after using Luck, moving on...");
+                    if (LogGate.DebugEnabled) logger.LogDebug("Didn't find item after using Luck, moving on...");
                     if (nodeCondition.CurrentIntegrity != nodeCondition.MaxIntegrity)
                     {
                         return null;
                     }
 
-                    logger.LogDebug("Actually there's crystals, let's get those");
+                    if (LogGate.DebugEnabled) logger.LogDebug("Actually there's crystals, let's get those");
                     // otherwise, there most likely is -any- other item available, probably a shard/crystal
                     _slotToGather = slots.MinBy(x => x.ItemId);
                     return actions;

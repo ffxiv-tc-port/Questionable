@@ -161,9 +161,12 @@ internal static class WaitAtEnd
         {
         }
 
+        /// <summary>false＝中斷時插入的重試緩衝：不是步驟本身的工作，下一次中斷不要把它當成「先前的工作」重播。</summary>
+        public bool RedoOnInterrupt { get; init; } = true;
+
         public bool ShouldRedoOnInterrupt()
         {
-            return true;
+            return RedoOnInterrupt;
         }
 
         public override string ToString()

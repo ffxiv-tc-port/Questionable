@@ -26,6 +26,12 @@ internal static class SwitchClassJob
 
     internal sealed record Task(Job ClassJob) : ITask
     {
+        /// <summary>
+        /// 不是 null 時，找不到該職業的套組改擲 <see cref="ManualActionRequiredException"/> 並把這句印到聊天視窗；
+        /// null 維持原本的 <see cref="TaskException"/>。
+        /// </summary>
+        public string? ManualActionChatMessage { get; init; }
+
         public override string ToString()
         {
             return $"SwitchJob({ClassJob})";
@@ -47,7 +53,7 @@ internal static class SwitchClassJob
                 for(int i = 0; i < 100; ++i)
                 {
                     RaptureGearsetModule.GearsetEntry* gearset = gearsetModule->GetGearset(i);
-                    if (gearset->ClassJob == (byte)Task.ClassJob)
+                    if (gearset != null && gearset->ClassJob == (byte)Task.ClassJob)
                     {
                         gearsetModule->EquipGearset(gearset->Id);
                         return true;
@@ -55,7 +61,15 @@ internal static class SwitchClassJob
                 }
             }
 
-            throw new TaskException($"No gearset found for {Task.ClassJob}");
+            throw CreateNoGearsetException();
+        }
+
+        private TaskException CreateNoGearsetException()
+        {
+            string message = $"No gearset found for {Task.ClassJob}";
+            return Task.ManualActionChatMessage is { } chatMessage
+                ? new ManualActionRequiredException(message, chatMessage)
+                : new TaskException(message);
         }
 
         protected override ETaskResult UpdateInternal()

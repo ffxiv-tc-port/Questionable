@@ -5,6 +5,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons.ExcelServices;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
@@ -12,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Questionable.Controller;
 using Questionable.Model;
 using Questionable.Model.Gathering;
+using Questionable.Model.Questing;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -111,12 +113,27 @@ internal sealed class GatheringJournalComponent
                          _gatheringPointRegistry.TryGetGatheringPoint(x.Point.Id, out GatheringRoot? gatheringRoot))
                 {
                     // for some reason the game doesn't know where this gathering location is
-                    TerritoryType territoryType = territoryTypeSheet.GetRow(gatheringRoot.Steps.Last().TerritoryId);
+                    // 🔴 TerritoryId 來自捆綁的 GatheringPaths JSON(上游依國際服編寫),而 TerritoryType 在台服
+                    // 是稀疏表(id 中間有空洞)。GetRow 撲空會擲例外,
+                    // 而這整段在建構式裡 —— 一擲就是採集日誌元件建不起來、外掛載入直接失敗。
+                    // 查不到就退回遊戲原本提供的 x.Point(與下面 else 分支同值),並記一筆 Information 供回報。
+                    QuestStep? lastStep = gatheringRoot.Steps.LastOrDefault();
+                    TerritoryType? territoryType = lastStep != null
+                        ? territoryTypeSheet.GetRowOrDefault(lastStep.TerritoryId)
+                        : null;
+                    if (territoryType == null)
+                    {
+                        _logger.LogInformation(
+                            "採集點 {PointId} 在捆綁路徑裡指向的區域 {TerritoryId} 不存在於本地 TerritoryType 表,改用遊戲提供的區域資訊",
+                            x.Point.Id, lastStep?.TerritoryId);
+                        return x.Point;
+                    }
+
                     return x.Point with
                     {
-                        Expansion = (EExpansionVersion)territoryType.ExVersion.RowId,
-                        TerritoryType = (ushort)territoryType.RowId,
-                        TerritoryName = territoryType.PlaceName.ValueNullable?.Name.ToString()
+                        Expansion = (EExpansionVersion)territoryType.Value.ExVersion.RowId,
+                        TerritoryType = (ushort)territoryType.Value.RowId,
+                        TerritoryName = territoryType.Value.PlaceName.ValueNullable?.Name.ToString()
                     };
                 }
                 else
@@ -153,29 +170,29 @@ internal sealed class GatheringJournalComponent
 
     public void DrawGatheringItems()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Gathering Points");
+        using var tab = ImRaii.TabItem("Gathering Points".Loc());
         if (!tab)
         {
             return;
         }
 
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-        if (ImGui.InputTextWithHint(string.Empty, "Search areas, gathering points and items", ref _searchText, 256))
+        if (ImGui.InputTextWithHint(string.Empty, "Search areas, gathering points and items".Loc(), ref _searchText, 256))
         {
             UpdateFilter();
         }
 
         if (_filteredExpansions.Count > 0)
         {
-            using ImRaii.TableDisposable table = ImRaii.Table("GatheringPoints", 3, ImGuiTableFlags.NoSavedSettings);
+            using var table = ImRaii.Table("GatheringPoints", 3, ImGuiTableFlags.NoSavedSettings);
             if (!table)
             {
                 return;
             }
 
-            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.NoHide);
-            ImGui.TableSetupColumn("Supported", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
-            ImGui.TableSetupColumn("Collected", ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.NoHide);
+            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Collected".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
             ImGui.TableHeadersRow();
 
             foreach(FilteredExpansion expansion in _filteredExpansions)
@@ -185,7 +202,7 @@ internal sealed class GatheringJournalComponent
         }
         else
         {
-            ImGui.Text("No area, gathering point or item matches your search text.");
+            ImGui.Text("No area, gathering point or item matches your search text.".Loc());
         }
     }
 

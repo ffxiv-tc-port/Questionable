@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Questionable.Data;
 using Questionable.Functions;
 using Questionable.Model;
 using Questionable.Model.Questing;
@@ -52,6 +53,7 @@ internal static class NextQuest
         QuestRegistry questRegistry,
         QuestController questController,
         QuestFunctions questFunctions,
+        QuestData questData,
         ILogger<NextQuestExecutor> logger) : TaskExecutor<SetQuestTask>
     {
         protected override bool Start()
@@ -59,6 +61,14 @@ internal static class NextQuest
             if (questController.AutomationType is QuestController.EAutomationType.SingleQuestA or QuestController.EAutomationType.SingleQuestB)
             {
                 logger.LogInformation("Won't set next quest to {QuestId}, automation type is CurrentQuestOnly", Task.NextQuestId);
+                questController.SetNextQuest(null);
+            }
+            else if (questData.IsMissingFromSheet(Task.NextQuestId))
+            {
+                // 與下面「找不到」同一個結果：不設下一個任務，這個工作照常完成、後面的交任務照跑。
+                logger.LogInformation(
+                    "下一個任務 {QuestId} 不在本客戶端的任務表裡（台服尚未開放的後續任務），任務 {CurrentQuestId} 交完後不接續",
+                    Task.NextQuestId, Task.CurrentQuestId);
                 questController.SetNextQuest(null);
             }
             else if (questFunctions.IsQuestLocked(Task.NextQuestId, Task.CurrentQuestId))

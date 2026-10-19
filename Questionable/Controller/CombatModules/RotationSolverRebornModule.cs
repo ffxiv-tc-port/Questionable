@@ -87,9 +87,11 @@ internal sealed class RotationSolverRebornModule
     [PublicAPI]
     private enum StateCommandType : byte
     {
-        Off,
-        Auto,
-        TargetOnly,
-        Manual
+        // 數值需與台服可用的 RotationSolverReborn 7.3.5 StateCommandType 契約同步
+        // （該版沒有 TargetOnly，Manual 位移到 2）。
+        Off = 0,
+        Auto = 1,
+        Manual = 2,
+        AutoDuty = 3,
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -51,6 +52,12 @@ internal sealed class CombatController : IDisposable
     private List<byte>? _previousQuestVariables;
     private bool _wasInCombat;
 
+    // 無參數 /lsync 是切換：送出後等狀態改變（或逾時）才准再送，每場 FATE 戰鬥最多送 MaxLevelSyncAttempts 次。
+    private static readonly TimeSpan LevelSyncResponseTimeout = TimeSpan.FromSeconds(5);
+    private const int MaxLevelSyncAttempts = 3;
+    private int _levelSyncAttempts;
+    private DateTime _levelSyncRetryAt = DateTime.MinValue;
+
     public CombatController(
         IEnumerable<ICombatModule> combatModules,
         MovementController movementController,
@@ -63,6 +70,8 @@ internal sealed class CombatController : IDisposable
         ILogger<CombatController> logger)
     {
         _combatModules = [.. combatModules];
+        logger.LogInformation("Combat modules registered (in order): {Modules}",
+            string.Join(", ", _combatModules.Select(x => x.GetType().Name)));
         _movementController = movementController;
         _targetManager = targetManager;
         _objectTable = objectTable;
@@ -87,7 +96,13 @@ internal sealed class CombatController : IDisposable
     {
         Stop("Starting combat");
 
-        ICombatModule? combatModule = _combatModules.FirstOrDefault(x => x.CanHandleFight(combatData));
+        ICombatModule? combatModule = null;
+        if (combatData.CombatItemUse != null)
+        {
+            combatModule = _combatModules.OfType<ItemUseModule>().FirstOrDefault(x => x.CanHandleFight(combatData));
+        }
+
+        combatModule ??= _combatModules.FirstOrDefault(x => x.CanHandleFight(combatData));
         if (combatModule == null)
         {
             return false;
@@ -226,6 +241,8 @@ internal sealed class CombatController : IDisposable
             }
         }
 
+        UpdateFateLevelSync(_targetManager.Target);
+
         if (_condition[ConditionFlag.InCombat])
         {
             _wasInCombat = true;
@@ -239,6 +256,55 @@ internal sealed class CombatController : IDisposable
         {
             return EStatus.InCombat;
         }
+    }
+
+    /// <summary>打 FATE 的討伐目標時還沒等級同步就送一次 /lsync，等同步狀態改變才准再送。只從 <see cref="Update"/> 呼叫。</summary>
+    private unsafe void UpdateFateLevelSync(IGameObject? target)
+    {
+        if (_currentFight == null || _currentFight.Data.SpawnType != EEnemySpawnType.FateEnemies)
+        {
+            return;
+        }
+
+        if (PlayerState.Instance()->IsLevelSynced)
+        {
+            if (_levelSyncAttempts > 0)
+            {
+                _logger.LogInformation("Level sync is active after {Attempts} /lsync command(s)", _levelSyncAttempts);
+                _levelSyncAttempts = 0;
+                _levelSyncRetryAt = DateTime.MinValue;
+            }
+
+            return;
+        }
+
+        if (target is not IBattleNpc { IsDead: false } ||
+            _currentFight.Data.ComplexCombatDatas.Count > 0 ||
+            !_currentFight.Data.KillEnemyDataIds.Contains(GameFunctions.GetBaseID(target)))
+        {
+            return;
+        }
+
+        DateTime now = DateTime.Now;
+        // 送不出聊天指令時跳過：每幀都會走到這裡，擲例外會變成每幀一次。
+        if (now < _levelSyncRetryAt || !_chatFunctions.IsAvailable)
+        {
+            return;
+        }
+
+        if (_levelSyncAttempts >= MaxLevelSyncAttempts)
+        {
+            _logger.LogInformation("Still not level synced after {Attempts} /lsync command(s), not sending more during this fight",
+                _levelSyncAttempts);
+            _levelSyncRetryAt = DateTime.MaxValue;
+            return;
+        }
+
+        _levelSyncAttempts++;
+        _levelSyncRetryAt = now + LevelSyncResponseTimeout;
+        _logger.LogInformation("Not level synced while fighting FATE target {DataId}, sending /lsync (attempt {Attempt}/{Max})",
+            GameFunctions.GetBaseID(target), _levelSyncAttempts, MaxLevelSyncAttempts);
+        _chatFunctions.ExecuteCommand("/lsync");
     }
 
     private IGameObject? FindNextTarget()
@@ -323,7 +389,9 @@ internal sealed class CombatController : IDisposable
 
             // stuff on our enmity list that's not necessarily targeting us
             Hater haters = UIState.Instance()->Hater;
-            for(int i = 0; i < haters.HaterCount; ++i)
+            // HaterCount 是遊戲寫入的 int，Haters 是 FixedSizeArray32 —— 兩者無結構保證，夾到容量內。
+            int haterCount = Math.Min(haters.HaterCount, haters.Haters.Length);
+            for(int i = 0; i < haterCount; ++i)
             {
                 HaterInfo hater = haters.Haters[i];
                 if (hater.EntityId == gameObject.GameObjectId)
@@ -413,16 +481,12 @@ internal sealed class CombatController : IDisposable
                 if ((!expectQuestMarker || gameObjectStruct->NamePlateIconId != 0 || _currentFight.Data.SpawnType == EEnemySpawnType.FateEnemies) &&
                     _currentFight.Data.KillEnemyDataIds.Contains(GameFunctions.GetBaseID(battleNpc)))
                 {
-                    if (_currentFight.Data.SpawnType == EEnemySpawnType.FateEnemies && !PlayerState.Instance()->IsLevelSynced)
-                    {
-                        _chatFunctions.ExecuteCommand("/lsync");
-                    }
                     return (90, "KED");
                 }
             }
 
             // enemies that we have aggro on
-            if (battleNpc.BattleNpcKind is BattleNpcSubKind.BNpcPart or BattleNpcSubKind.Combatant)
+            if (battleNpc.BattleNpcKind is BattleNpcSubKind.BattleNpcPart or BattleNpcSubKind.Enemy)
             {
                 // npc that starts a fate or does turn-ins; not sure why they're marked as hostile
                 if (gameObjectStruct->NamePlateIconId is 60093 or 60732)
@@ -540,8 +604,18 @@ internal sealed class CombatController : IDisposable
 
         RaycastHit hit;
         int* flags = stackalloc int[] { 0x4000, 0, 0x4000, 0 };
+
+        // 🔴 Framework.Instance() 回的是全域指標槽的內容，遊戲還沒建好／正在拆掉 Framework 時合法為 null；
+        //    BGCollisionModule 也只是普通指標欄位。裸鏈解參考是 try/catch 攔不到的 AccessViolation。
+        // fail-closed：拿不到碰撞模組就回 false＝「視線被擋」，呼叫端對 false 的反應是往目標靠近（良性）；
+        //    回 true 等於在零依據下宣稱「看得到」。熱路徑，刻意不寫 log。
+        Framework* framework = Framework.Instance();
+        BGCollisionModule* collision = framework != null ? framework->BGCollisionModule : null;
+        if (collision == null)
+            return false;
+
         bool isLoSBlocked =
-            Framework.Instance()->BGCollisionModule->RaycastMaterialFilter(&hit, &originVect, &directionVect, distance,
+            collision->RaycastMaterialFilter(&hit, &originVect, &directionVect, distance,
                 1, flags);
 
         return !isLoSBlocked;
@@ -560,20 +634,46 @@ internal sealed class CombatController : IDisposable
         */
     }
 
-    public void Stop(string label)
+    /// <summary>停止目前的戰鬥。</summary>
+    /// <param name="defer">
+    /// 不是 <see langword="null"/> 時，<b>只有那一行記錄</b>交給它安排；
+    /// 停戰鬥的動作與狀態重設仍然當場同步做。
+    /// </param>
+    /// <remarks>
+    /// 🔴 <c>QuestController</c> 是持著 <c>_progressLock</c> 呼叫這一支的
+    /// （<c>ClearTasksInternal</c>／<c>ExecuteNextStep</c>／<c>StopAllDueToConditionFailed</c>），
+    /// 而 <c>ILogger</c> 最後落到 Dalamud 的 Serilog sink——那邊自己有鎖、還會做檔案 I/O。
+    /// 📌 延後的那一段把 <c>BeginScope(label)</c> 一起帶進去重建，前綴才不會掉；
+    /// <paramref name="defer"/> 不給的時候就地執行。
+    /// </remarks>
+    public void Stop(string label, Action<Action>? defer = null)
     {
         using IDisposable? scope = _logger.BeginScope(label);
         if (_currentFight != null)
         {
-            _logger.LogInformation("Stopping current fight");
+            if (defer != null)
+            {
+                defer(() =>
+                {
+                    using IDisposable? deferredScope = _logger.BeginScope(label);
+                    _logger.LogInformation("Stopping current fight");
+                });
+            }
+            else
+            {
+                _logger.LogInformation("Stopping current fight");
+            }
+
             _currentFight.Module.Stop();
         }
 
         _currentFight = null;
         _wasInCombat = false;
+        _levelSyncAttempts = 0;
+        _levelSyncRetryAt = DateTime.MinValue;
     }
 
-    private void TerritoryChanged(uint territoryId)
+    private void TerritoryChanged(ushort territoryId)
     {
         Stop("TerritoryChanged");
     }

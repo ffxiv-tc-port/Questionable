@@ -61,6 +61,19 @@ internal sealed class LandExecutor(IObjectTable objectTable, ICondition conditio
         return false;
     }
 
+    /// <summary>不建任務、就地送出一次降落。</summary>
+    /// <remarks>給 <c>MovementController</c> 的「先降落再重試」用：它在 framework 執行緒上，
+    /// 只需要把動作送出去，有沒有降落成功由 <c>ConditionFlag.InFlight</c> 翻面來判定。</remarks>
+    internal static unsafe bool TryLanding()
+    {
+        if (ActionManager.Instance()->GetActionStatus(ActionType.GeneralAction, 23) != 0)
+        {
+            return false;
+        }
+
+        return ActionManager.Instance()->UseAction(ActionType.GeneralAction, 23);
+    }
+
     public override bool ShouldInterruptOnDamage()
     {
         return false;

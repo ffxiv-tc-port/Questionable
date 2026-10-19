@@ -1,10 +1,12 @@
 ﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Plugin.Services;
 using ECommons;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
+using Questionable.Data;
 using Questionable.Functions;
 using Questionable.Model.Questing;
 using Questionable.Windows;
@@ -35,6 +37,7 @@ internal sealed class CommandHandler : IDisposable
     private readonly OneTimeSetupWindow _oneTimeSetupWindow;
     private readonly PriorityWindow _priorityWindow;
     private readonly QuestController _questController;
+    private readonly QuestData _questData;
     private readonly QuestFunctions _questFunctions;
     private readonly QuestRegistry _questRegistry;
     private readonly QuestSelectionWindow _questSelectionWindow;
@@ -63,7 +66,8 @@ internal sealed class CommandHandler : IDisposable
         GameFunctions gameFunctions,
         IDataManager dataManager,
         IClientState clientState,
-        Configuration configuration)
+        Configuration configuration,
+        QuestData questData)
     {
         _commandManager = commandManager;
         _chatGui = chatGui;
@@ -84,6 +88,7 @@ internal sealed class CommandHandler : IDisposable
         _dataManager = dataManager;
         _clientState = clientState;
         _configuration = configuration;
+        _questData = questData;
 
         _clientState.Logout += OnLogout;
         _commandManager.AddHandler("/qst", new(ProcessCommand)
@@ -284,7 +289,11 @@ internal sealed class CommandHandler : IDisposable
         switch (parts[0])
         {
             case "abandon-duty":
-                _gameFunctions.AbandonDuty();
+                if (!_gameFunctions.AbandonDuty())
+                {
+                    _chatGui.PrintError("abandon-duty is unavailable: the game function address could not be resolved.", MessageTag, TagColor);
+                }
+
                 break;
 
             case "unlock-links":
@@ -404,7 +413,11 @@ internal sealed class CommandHandler : IDisposable
     {
         if (arguments.Length >= 1 && ElementId.TryFromString(arguments[0], out ElementId? questId) && questId != null)
         {
-            if (_questFunctions.IsQuestLocked(questId))
+            if (_questData.IsMissingFromSheet(questId))
+            {
+                _chatGui.PrintError($"Unknown quest {questId}.", MessageTag, TagColor);
+            }
+            else if (_questFunctions.IsQuestLocked(questId))
             {
                 _chatGui.PrintError($"Quest {questId} is locked.", MessageTag, TagColor);
             }

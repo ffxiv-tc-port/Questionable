@@ -82,6 +82,9 @@ internal static class AethernetShortcut
         private bool _teleported;
         private bool _triedMounting;
 
+        /// <summary>已經把傳送交給 Lifestream（之後到任務完成前，Lifestream 可能正在替我們跑）。</summary>
+        internal bool LifestreamRequested => _teleported;
+
         protected override bool Start()
         {
             if (!Task.SkipConditions.Never)

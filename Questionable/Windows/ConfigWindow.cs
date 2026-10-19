@@ -36,7 +36,7 @@ internal sealed class ConfigWindow
 
     public override void DrawContent()
     {
-        using ImRaii.TabBarDisposable tabBar = ImRaii.TabBar("QuestionableConfigTabs");
+        using var tabBar = ImRaii.TabBar("QuestionableConfigTabs");
         if (!tabBar)
         {
             return;

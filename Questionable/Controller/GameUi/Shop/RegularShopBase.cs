@@ -1,12 +1,13 @@
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
-using Dalamud.Game.NativeWrapper;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Questionable.Controller.GameUi.Shop.Model;
+using Questionable.Utils;
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Numerics;
 namespace Questionable.Controller.GameUi.Shop;
 
@@ -83,9 +84,9 @@ public class RegularShopBase
             short x = 0, y = 0;
             addon->GetPosition(&x, &y);
 
-            ushort width = 0, height = 0;
+            short width = 0, height = 0;
             addon->GetSize(&width, &height, true);
-            x += (short)width;
+            x += width;
 
             if (_parentWindow.Position is { } position && ((short)position.X != x || (short)position.Y != y))
             {
@@ -160,11 +161,22 @@ public class RegularShopBase
         {
             if (PurchaseState.NextStep <= DateTime.Now)
             {
-                AtkUnitBasePtr addonShopPtr = _gameGui.GetAddonByName(_addonName);
-                if (!addonShopPtr.IsNull)
+                nint addonShopPtr = _gameGui.GetAddonByName(_addonName, 1);
+                if (addonShopPtr != nint.Zero)
                 {
-                    AtkUnitBase* addonShop = (AtkUnitBase*)addonShopPtr.Address;
+                    AtkUnitBase* addonShop = (AtkUnitBase*)addonShopPtr;
                     int buyNow = Math.Min(PurchaseState.ItemsLeftToBuy, maxStackSize);
+
+                    // 🔴 守衛擋下時連 NextStep／IsAwaitingYesNo 都不能動:那兩個一旦寫下去就會
+                    // 一直等「持有數量改變」，而這一發根本沒送出去 ⇒ 整條採購流程停擺。
+                    // 商店是多次互動窗(買完不會關) ⇒ 逃生口用 15 幀，下一幀就會再來一次。
+                    if (!AddonPressGuard.TryBeginPress(_addonName, addonShop,
+                            "buy:" + buyNow.ToString(CultureInfo.InvariantCulture),
+                            AddonPressGuard.RoutineRePressEscapeFrames))
+                    {
+                        return;
+                    }
+
                     _pluginLog.Information($"Buying {buyNow}x {ItemForSale.ItemName}");
 
                     _parentWindow.TriggerPurchase(addonShop, buyNow);

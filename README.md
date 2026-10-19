@@ -1,215 +1,67 @@
-<section id="top">
-    <p style="text-align:center;" align="center">
-        <img align="center" src="https://github.com/qstxiv/icons/raw/main/Questionable.png" width="250" />
-    </p>
-    <h1 style="text-align:center;" align="center">Questionable</h1>
-    <p style="text-align:center;" align="center">
-        Automated quest helper designed to do your quests for you.
-    </p>
-</section>
+# Questionable
 
-<!-- Badges -->
-<p align="center"> 
-<!-- Build & commit activity -->
-  <a href="https://github.com/PunishXIV/Questionable/commits/new-main" alt="Commits">
-    <img src="https://img.shields.io/github/last-commit/PunishXIV/Questionable/new-main?color=00D162&style=for-the-badge" /></a>
-   <a href="https://github.com/PunishXIV/Questionable/commits/new-main" alt="Commit Activity">
-    <img src="https://img.shields.io/github/commit-activity/m/PunishXIV/Questionable?color=00D162&style=for-the-badge" /></a>
-  <br> 
-<!-- Other -->
-  <a href="https://github.com/PunishXIV/Questionable/issues" alt="Open Issues">
-    <img src="https://img.shields.io/github/issues-raw/PunishXIV/Questionable?color=EA9C0A&style=for-the-badge" /></a>
-  <a href="https://github.com/PunishXIV/Questionable/graphs/contributors" alt="Contributors">
-    <img src="https://img.shields.io/github/contributors/PunishXIV/Questionable?color=009009&style=for-the-badge" /></a>
-<br>
-<!-- Version -->
-  <a href="https://github.com/PunishXIV/Questionable/tags" alt="Release">
-    <img src="https://img.shields.io/github/v/tag/PunishXIV/Questionable?label=Release&logo=git&logoColor=ffffff&style=for-the-badge" /></a>
-  <a href="https://github.com/sponsors/alydevs" alt="Sponsor">
-    <img src="https://img.shields.io/github/sponsors/alydevs?label=Sponsor&logo=githubsponsors&style=for-the-badge" /></a>
-<br>
-  <!-- Discord -->
-  <a href="https://discord.gg/Zzrcc8kmvy" alt="Discord">
-    <img src="https://discordapp.com/api/guilds/1001823907193552978/embed.png?style=banner2" /></a>
-</div>
-</p>
+[Questionable](https://github.com/PunishXIV/Questionable) 的台服移植版。自動跑任務助手：導航到任務目標、處理對話與互動，自動完成任務。
 
-<section id="contents">
+## 功能
 
-### Contents
-* [About](#about)
-* [Companion Plugins](#deps)
-* [Installation](#installation)
-* [Commands](#commands)
-* [Contributing](#contributing)
+- 依序自動執行任務：移動、對話選項、互動、戰鬥觸發等
+- 支援主線／支線任務、部分友好部族任務、採集類任務
+- 採集任務可自動移動至採集點並執行採集
+- 釣魚類任務可自動生成釣組並完成釣魚（需搭配 AutoHook）
+- 任務戰鬥（單人副本）可交給 BossMod 自動完成
+- 任務優先順序視窗，可調整多個可做任務的執行順序
+- 任務驗證／除錯視窗，方便回報路徑資料問題
 
-</section>
+## 相依插件
 
-<section id="about">
+**必要**：
+- vnavmesh — 區域內導航移動
+- Lifestream — 城內乙太之晶快速移動
+- TextAdvance — 自動接取／完成任務、跳過對話與過場動畫
 
-# About
+**戰鬥模組（擇一）**：BossMod（台服插件庫的 BossMod Reborn 也可以）、Rotation Solver Reborn
 
-<p> Questionable is a third-party plugin for <a href="https://goatcorp.github.io/" alt="XIVLauncher">XIVLauncher</a>.<br><br>
-    It automates quest completion by navigating to objectives while also handling dialogue, interaction, and task fulfillment for eligible quests, streamlining all quest progression processes. <br><br>
-    This plugin was originated by <a href="https://github.com/carvelli" alt="Liza">Liza</a> and is maintained by:
-    <ul>
-    <li><a href="https://github.com/alydevs">alydev</a></li>
-    <li><a href="https://github.com/erdelf">erdelf</a></li>
-    <li><a href="https://github.com/nightmarexiv">Limiana</a></li>
-    <li><a href="https://github.com/CensoredFFXIV">Censored</a></li>
-    <li><a href="https://github.com/ClockwiseStarr">ClockwiseStarr</a></li>
-    <li><a href="https://github.com/MrGuffels">MrGuffels</a></li>
-    <li><a href="https://github.com/WigglyMuffin">WigglyMuffin</a></li>
-    <li><a href="https://github.com/v3rso">v3rso</a></li>
-    </ul>
-</p>
+**選配**：[CBT](https://github.com/Jaksuhn/Automaton)（自動完成狙擊任務）、
+[Pandora's Box](https://github.com/PunishXIV/PandorasBox)（自動完成 ATM）、
+Artisan（涉及製作的任務）、AutoDuty（需要組隊完成的副本）、AutoHook（釣魚任務）、
+YesAlready（跑任務期間自動暫停它）、TataruPraise（需要人工處理時出聲提醒）
 
-</section><br>
+除了 CBT、Pandora's Box 與 Rotation Solver Reborn，以上都在台服插件庫。
 
-<!-- Companion Plugins -->
-<section id="deps"><br>
+## 指令
 
-# Companion Plugins
+| 指令 | 功能 |
+|---|---|
+| `/qst` | 開啟任務視窗 |
+| `/qst help`／`/qst help-all` | 列出常用／全部指令 |
+| `/qst config` | 開啟設定視窗 |
+| `/qst start` | 開始執行任務 |
+| `/qst stop` | 停止執行 |
+| `/qst reload` | 重新載入所有任務資料 |
+| `/qst next <任務編號>` | 指定下一個要做的任務（不帶編號＝清除） |
+| `/qst which` | 顯示以目前選取目標開頭的任務 |
+| `/qst zone` | 顯示目前所在地圖可執行的任務（僅限有路徑資料、可見且未接取的任務） |
+| `/qst journal` | 開啟任務進度視窗 |
+| `/qst priority` | 開啟任務優先順序視窗 |
 
-This plugin relies on other tools to function optimally.
+## 台服版的修改
 
-## Required
+- **自動接續**（主視窗勾選，預設關）：沒有任務可做時不停下、持續等下一個任務（最多 90 秒），尋路失敗會自動重試目前步驟。
+- **暫停主線任務**（進階分頁，預設關）：不再自動接取下一個主線任務，其他任務照常。
+- **任務獎勵**：可自動開啟任務獎勵寶箱（預設關）；接任務時自動使用背包裡還沒學會的表情教材、秘傳書與傳承錄。
+- **優先任務清單**可一鍵補上整串還沒做的前置任務。
+- **任務戰鬥失敗時停下**：交給 BossMod 打的任務戰鬥失敗時不自動重試，停下並提醒（可關）。
+- **卡住處理**：卡住時自動重新整理任務步驟、乙太之光共鳴卡住時小幅走位、飛行中找不到路先降落再重試，用完重試額度會停下並說明原因。
+- **跨插件整合**：釣魚任務接上 AutoHook；交給 AutoDuty 跑副本時只用暫時設定，不改掉 AutoDuty 的模式與輪數；跑任務期間以租約暫停 YesAlready；需要人工處理時請 TataruPraise 出聲；AutoRetainer 換角前會請它停止。
+- **台服相容性修正**：確認框（含帶物品名稱的問句、付交通費的渡船與飛空艇）自動回答、副本區選單自動選「隨意（自動選擇）」、台服還沒開放的後續任務照常交完目前任務再結束、台服沒有的任務路線收成一行統計；相依插件的安裝來源改指台服插件庫。
+- 多處防閃退修正（確認框連按、跨插件 IPC 改在主執行緒執行）與多處降低記憶體用量。
+- 介面繁體中文化。
 
-Each of the following plugins is required for specific reasons:
+## 安裝
 
-- ### [vnavmesh](https://github.com/awgil/ffxiv_navmesh)  
-Handles in-zone navigation. It enables your character to move seamlessly from one quest objective to the next.
+在 Dalamud 設定的「自訂插件庫」加入
+`https://raw.githubusercontent.com/ffxiv-tc-port/DalamudPluginsTC/main/repo.json` 並啟用，
+再從插件列表安裝。
 
-- ### [LifeStream](https://github.com/NightmareXIV/Lifestream)  
-Proper fast-travel functionality within cities using Aetherytes and Aethernet Shards.
-
-- ### [TextAdvance](https://github.com/NightmareXIV/TextAdvance)  
-Automated quest interactions, including accepting and turning in quests as well as skipping cutscenes and dialogue.
-
-## Optional
-
-The following plugins enable extra functionality in Questionable.
-
-### Combat Automation
-
-For rotation/combat automation, select one of these plugins. Questionable recommends and actively works with the developers of Boss Mod (VBM) and Wrath Combo to ensure the best experience for users of this plugin, but other options are supported.
-
-- ### [Boss Mod (VBM)](https://github.com/awgil/ffxiv_bossmod)
-A plugin that provides boss fight radar, auto-rotation, cooldown planning, and AI. All of its modules can be toggled individually.
-
-> [!WARNING]
-> Forks of Boss Mod, such as BossMod Reborn, are not supported by Questionable, and will likely lead to issues.
-
-- ### [Wrath Combo](https://github.com/PunishXIV/WrathCombo)
-Wrath Combo is a heavily enhanced version of the XIVCombo plugin, offering highly customisable features and options to allow users to have their rotations be as complex or simple as possible, even to the point of a single button; for PvE, PvP, and more.
-
-- ### [Rotation Solver Reborn](https://github.com/FFXIV-CombatReborn/RotationSolverReborn)
-RotationSolverReborn is a community-made fork of the original RotationSolver plugin for Final Fantasy XIV. This tool is designed to enhance your gameplay experience by performing your rotation as optimally as possible, including heals, interrupts, mitigations, and MP management.
-
-### Other Features
-
-The following plugins are recommended, but not required.
-
-- ### [CBT (formerly known as Automaton)](https://github.com/Jaksuhn/Automaton)
-CBT is a tweak collection plugin that largely focuses on automating small and frequent tasks. Questionable uses it for the "Sniper No Sniping" tweak, which automatically completes sniping tasks introduced in Stormblood.
-
-- ### [Pandora's Box](https://github.com/PunishXIV/PandorasBox)
-Pandora's Box is a tweak collection plugin. Questionable uses it for the "Auto Active Time Maneuver" tweak, which automatically completes active time maneuvers in duties.
-
-
-- ### [Artisan](https://github.com/PunishXIV/Artisan)
-Artisan is a plugin for automating crafting. Questionable uses it for quests that involve crafting.
-
-- ### [AutoDuty](https://github.com/ffxivcode/AutoDuty)
-AutoDuty is a plugin that serves as a tool to assist in the creation and following of paths through dungeons and duties. Questionable uses it to automate the completion of duties that are required for certain quests.
-
-</section><br>
-
-<!-- Installation -->
-<section id="installation"><br>
-
-# Installation
-
-<img src="https://github.com/PunishXIV/WrathCombo/raw/main/res/readme_images/adding_repo.jpg" width="450" />
-
-Open the Dalamud Settings menu in game and follow the steps below.
-This can be done through the button at the bottom of the plugin installer or by
-typing `/xlsettings` in the chat.
-
-1. Under Custom Plugin Repositories, enter `https://love.puni.sh/ment.json` into the empty box at the bottom.
-2. Click the "+" button.
-3. Click the "Save and Close" button.
-
-Open the Dalamud Plugin Installer menu in game and follow the steps below.
-This can be done through `/xlplugins` in the chat.
-
-1. Click the "All Plugins" tab on the left.
-2. Search for "Questionable".
-3. Click the "Install" button.
-</section><br>
-
-<!-- Commands -->
-<section id="commands">
-
-# Commands
-
-<table>
-<thead>
-<tr>
-<th align="left"><strong>Chat command</strong></th>
-<th align="left"><strong>Function</strong></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td align="left"><code>/qst</code></td>
-<td align="left">Opens the Questing window.</td>
-</tr>
-<tr>
-<td align="left"><code>/qst config</code></td>
-<td align="left">Opens the Configuration window.</td>
-</tr>
-<tr>
-<td align="left"><code>/qst start</code></td>
-<td align="left">Starts doing quests.</td>
-</tr>
-<tr>
-<td align="left"><code>/qst stop</code></td>
-<td align="left">Stops doing quests.</td>
-</tr>
-<tr>
-<td align="left"><code>/qst reload</code></td>
-<td align="left">Reloads all quests data.</td>
-</tr>
-<tr>
-<td align="left"><code>/qst which</code></td>
-<td align="left">Shows all quests starting with your selected target.</td>
-</tr>
-<tr>
-<td align="left"><code>/qst zone</code></td>
-<td align="left">Shows all quests starting with your current zone.<br> (<b>NOTE</b>: This only includes quests with a valid quest path and are currently visible &amp; unaccepted.)</td>
-</tr>
-</tbody>
-</table>
-
-</section><br>
-
-<!-- Contributing -->
-<section id="contributing">
-
-# Contributing
-
-Contributions to the project are always welcome and much appreciated!<br><br>
-
-Please feel free to submit a [pull request](https://github.com/PunishXIV/Questionable/pulls) here on GitHub,
-or you can get in contact with us over on the [Discord](https://discord.gg/Zzrcc8kmvy) server inside the `#ffxiv-Questionable` channel.
-
-<!-- Punish Logo & Discord -->
-<div align="center">
-  <a href="https://puni.sh/" alt="Puni.sh">
-    <img src="https://github.com/PunishXIV/AutoHook/assets/13919114/a8a977d6-457b-4e43-8256-ca298abd9009" /></a>
-<br>
-  <a href="https://discord.gg/Zzrcc8kmvy" alt="Discord">
-    <img src="https://discordapp.com/api/guilds/1001823907193552978/embed.png?style=banner2" /></a>
-</div>
-<br>
+原作者：[Liza](https://github.com/carvelli)，上游現由 alydev、erdelf、Limiana、Censored、
+ClockwiseStarr、MrGuffels、WigglyMuffin、v3rso 等人維護。

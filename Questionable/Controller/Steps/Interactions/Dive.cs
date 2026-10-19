@@ -12,10 +12,30 @@ namespace Questionable.Controller.Steps.Interactions;
 
 internal static class Dive
 {
-    private static DiveDelegate DiveFunc = Marshal.GetDelegateForFunctionPointer<DiveDelegate>(Svc.SigScanner.ScanText("48 89 5C 24 ?? 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 48 8B 1D ?? ?? ?? ?? 48 8D 54 24"));
-    public static unsafe void ExecuteDive()
+    private const string DiveSignature =
+        "48 89 5C 24 ?? 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 48 8B 1D ?? ?? ?? ?? 48 8D 54 24";
+
+    /// <summary><see langword="null"/>＝遊戲改版後特徵碼對不上：自動潛水停用，步驟改請使用者手動潛水。</summary>
+    private static readonly DiveDelegate? DiveFunc = ResolveDiveFunc();
+
+    // 靜態初始式擲例外＝之後每次碰這個型別都擲 TypeInitializationException，所以一律不擲。
+    private static DiveDelegate? ResolveDiveFunc()
     {
+        if (Svc.SigScanner.TryScanText(DiveSignature, out nint address) && address != 0)
+            return Marshal.GetDelegateForFunctionPointer<DiveDelegate>(address);
+
+        Svc.Log.Warning("[Dive] Dive function signature not found (game update?); automatic diving is disabled");
+        return null;
+    }
+
+    /// <returns><see langword="false"/>＝潛水函式不可用，什麼都沒做。</returns>
+    public static unsafe bool TryExecuteDive()
+    {
+        if (DiveFunc == null)
+            return false;
+
         DiveFunc(Control.Instance());
+        return true;
     }
     private static unsafe void Dismount()
     {
@@ -69,7 +89,10 @@ internal static class Dive
         {
             if (condition[ConditionFlag.Swimming] || condition[ConditionFlag.Mounted])
             {
-                ExecuteDive();
+                // 潛不下去時不下坐騎：沿用「請手動潛水」這條既有的失敗訊息。
+                if (!TryExecuteDive())
+                    throw new TaskException("Please dive manually.");
+
                 Dismount();
                 return true;
             }

@@ -1,4 +1,5 @@
 ﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Text;
@@ -6,6 +7,7 @@ using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
 using Dalamud.Plugin.Services;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Application.Network.WorkDefinitions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
@@ -219,7 +221,7 @@ internal sealed class CreationUtilsComponent
         if (hoveredItemId != 0)
         {
             ImGui.Separator();
-            ImGui.Text($"Hovered Item: {hoveredItemId}");
+            ImGui.Text($"{"Hovered Item".Loc()}: {hoveredItemId}");
         }
     }
 
@@ -233,12 +235,12 @@ internal sealed class CreationUtilsComponent
 
         ImGui.Separator();
         ImGui.Text(string.Create(CultureInfo.InvariantCulture,
-            $"Target: {target.Name}  ({target.ObjectKind}; {GameFunctions.GetBaseID(target)}{nameId})"));
+            $"{"Target".Loc()}: {target.Name}  ({target.ObjectKind}; {GameFunctions.GetBaseID(target)}{nameId})"));
 
         if (_objectTable[0] != null)
         {
             ImGui.Text(string.Create(CultureInfo.InvariantCulture,
-                $"Distance: {(target.Position - _objectTable[0]!.Position).Length():F2}"));
+                $"{"Distance".Loc()}: {(target.Position - _objectTable[0]!.Position).Length():F2}"));
             ImGui.SameLine();
 
             float verticalDistance = target.Position.Y - _objectTable[0]!.Position.Y;
@@ -264,7 +266,7 @@ internal sealed class CreationUtilsComponent
         ImGui.BeginDisabled(!_movementController.IsNavmeshReady || _gameFunctions.IsOccupied());
         if (!_movementController.IsPathfinding)
         {
-            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Bullseye, "To Target"))
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Bullseye, "To Target".Loc()))
             {
                 _movementController.NavigateTo(EMovementType.DebugWindow, GameFunctions.GetBaseID(target),
                     target.Position,
@@ -274,7 +276,7 @@ internal sealed class CreationUtilsComponent
         }
         else
         {
-            if (ImGui.Button("Cancel pathfinding"))
+            if (ImGui.Button("Cancel pathfinding".Loc()))
             {
                 _movementController.ResetPathfinding();
             }
@@ -285,9 +287,9 @@ internal sealed class CreationUtilsComponent
         ImGui.SameLine();
         ImGui.BeginDisabled(!_questData.IsIssuerOfAnyQuest(GameFunctions.GetBaseID(target)));
         bool showQuests = ImGuiComponents.IconButton(FontAwesomeIcon.MapMarkerAlt);
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
         {
-            ImGui.SetTooltip("Show all Quests starting with your current target.");
+            DisabledAwareTooltip.SetTooltip("Show all Quests starting with your current target.".Loc());
         }
         if (showQuests)
         {
@@ -299,9 +301,9 @@ internal sealed class CreationUtilsComponent
         ImGui.BeginDisabled(_gameFunctions.IsOccupied());
         ImGui.SameLine();
         bool interact = ImGuiComponents.IconButton(FontAwesomeIcon.MousePointer);
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
         {
-            ImGui.SetTooltip("Interact with your current target.");
+            DisabledAwareTooltip.SetTooltip("Interact with your current target.".Loc());
         }
         if (interact)
         {
@@ -337,7 +339,7 @@ internal sealed class CreationUtilsComponent
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip(
-                "Left click: Copy target position as JSON.\nRight click: Copy target position as C# code.");
+                "Left click: Copy target position as JSON.\nRight click: Copy target position as C# code.".Loc());
         }
         if (copy)
         {
@@ -400,7 +402,7 @@ internal sealed class CreationUtilsComponent
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip(
-                "Left click: Copy your position as JSON.\nRight click: Copy your position as C# code.");
+                "Left click: Copy your position as JSON.\nRight click: Copy your position as C# code.".Loc());
         }
         if (copy)
         {

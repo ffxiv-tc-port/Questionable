@@ -106,8 +106,22 @@ internal sealed class ItemUseModule(IServiceProvider serviceProvider, ICondition
                     _delegate.Stop();
                     unsafe
                     {
-                        _logger.LogInformation("Using item {ItemId}", _combatData.CombatItemUse.ItemId);
-                        AgentInventoryContext.Instance()->UseItem(_combatData.CombatItemUse.ItemId);
+                        // AgentInventoryContext.Instance() 走 [Agent] 產生器，本體即
+                        // 「agentModule == null ? null : GetAgentByInternalId(...)」，兩層都能
+                        // 合法回 null，裸接 ->UseItem() 是攔不到的 AccessViolation。
+                        // fail-closed：取不到就這次不用道具。下面的 _continueAt 照樣往後推 2 秒，
+                        // 所以會在 2 秒後重試，不會變成每幀重試的迴圈。
+                        AgentInventoryContext* agentInventoryContext = AgentInventoryContext.Instance();
+                        if (agentInventoryContext != null)
+                        {
+                            _logger.LogInformation("Using item {ItemId}", _combatData.CombatItemUse.ItemId);
+                            agentInventoryContext->UseItem(_combatData.CombatItemUse.ItemId);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Inventory context agent is unavailable, not using item {ItemId}",
+                                _combatData.CombatItemUse.ItemId);
+                        }
                     }
                     _continueAt = DateTime.Now.AddSeconds(2);
                 }

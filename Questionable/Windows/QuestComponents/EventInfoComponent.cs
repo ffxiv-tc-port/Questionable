@@ -2,6 +2,7 @@
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using Humanizer;
 using Humanizer.Localisation;
 using Questionable.Controller;
@@ -31,7 +32,7 @@ internal sealed class EventInfoComponent
     [SuppressMessage("ReSharper", "CollectionNeverUpdated.Local")]
     private readonly List<EventQuest> _eventQuests =
     [
-        new("Limited Time Items", [new UnlockLinkId(568)], DateTime.MaxValue),
+        new("Limited Time Items".Loc(), [new UnlockLinkId(568)], DateTime.MaxValue),
         new("Valentione's Day 2026", [new QuestId(5325)], AtDailyReset(new(2026, 2, 16))) // January 15, 2026 at 6:59 a.m. (PST) 
     ];
     private readonly QuestController _questController = questController;
@@ -85,14 +86,15 @@ internal sealed class EventInfoComponent
             .ToList();
         foreach(ElementId questId in eventQuest.QuestIds)
         {
-            if (_questFunctions.IsQuestComplete(questId))
+            if (!_questData.TryGetQuestInfo(questId, out IQuestInfo? questInfo) ||
+                _questFunctions.IsQuestComplete(questId))
             {
                 continue;
             }
 
             using (ImRaii.PushId($"##EventQuestSelection{questId}"))
             {
-                string questName = _questData.GetQuestInfo(questId).Name;
+                string questName = questInfo.Name;
                 if (startableQuests.Contains(questId) &&
                     _questRegistry.TryGetQuest(questId, out Quest? quest))
                 {
@@ -121,7 +123,7 @@ internal sealed class EventInfoComponent
                     (Vector4 Color, FontAwesomeIcon Icon, string Status) style = _uiUtils.GetQuestStyle(questId);
                     if (_uiUtils.ChecklistItem(questName, style.Color, style.Icon, ImGui.GetStyle().FramePadding.X))
                     {
-                        _questTooltipComponent.Draw(_questData.GetQuestInfo(questId));
+                        _questTooltipComponent.Draw(questInfo);
                     }
                 }
             }
@@ -146,9 +148,11 @@ internal sealed class EventInfoComponent
             .Where(ShouldShowQuest);
     }
 
+    // 活動清單照國際服排程寫死；本客戶端表裡沒有的任務（台服可能還沒開放）一律不顯示。
     private bool ShouldShowQuest(ElementId elementId)
     {
-        return !_questFunctions.IsQuestComplete(elementId) &&
+        return _questData.TryGetQuestInfo(elementId, out _) &&
+               !_questFunctions.IsQuestComplete(elementId) &&
                !_questFunctions.IsQuestUnobtainable(elementId);
     }
 

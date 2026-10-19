@@ -5,6 +5,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons.ExcelServices;
 using ECommons.ImGuiMethods;
+using ECommons.LanguageHelpers;
 using Lumina.Excel.Sheets;
 using Questionable.Controller;
 using Questionable.Data;
@@ -18,8 +19,8 @@ namespace Questionable.Windows.ConfigComponents;
 
 internal sealed class GeneralConfigComponent : ConfigComponent
 {
-    private static readonly List<(uint Id, string Name)> DefaultMounts = [(0, "Mount Roulette")];
-    private static readonly List<(Job ClassJob, string Name)> DefaultClassJobs = [(Job.ADV, "Auto (highest level/item level)")];
+    private static readonly List<(uint Id, string Name)> DefaultMounts = [(0, "Mount Roulette".Loc())];
+    private static readonly List<(Job ClassJob, string Name)> DefaultClassJobs = [(Job.ADV, "Auto (highest level/item level)".Loc())];
 
     private readonly Job[] _classJobIds;
     private readonly string[] _classJobNames;
@@ -29,7 +30,17 @@ internal sealed class GeneralConfigComponent : ConfigComponent
     private readonly string[] _gatherJobNames;
 
     private readonly string[] _grandCompanyNames =
-        ["None (manually pick quest)", "Maelstrom", "Twin Adder", "Immortal Flames"];
+        ["None (manually pick quest)".Loc(), "Maelstrom".Loc(), "Twin Adder".Loc(), "Immortal Flames".Loc()];
+
+    private static readonly Dictionary<Configuration.ECombatModule, string> CombatModuleNames = new()
+    {
+        [Configuration.ECombatModule.None] = "None".Loc(),
+    };
+
+    private static readonly Dictionary<Configuration.EGearsetUpdateSource, string> GearsetUpdateSourceNames = new()
+    {
+        [Configuration.EGearsetUpdateSource.Vanilla] = "Vanilla".Loc(),
+    };
 
     private readonly uint[] _mountIds;
     private readonly string[] _mountNames;
@@ -87,7 +98,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
 
     public override void DrawTab()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("General###General");
+        using var tab = ImRaii.TabItem("General###General");
         if (!tab)
         {
             return;
@@ -95,7 +106,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
 
 
         Configuration.ECombatModule combatModule = Configuration.General.CombatModule;
-        if (ImGuiEx.EnumCombo("Preferred Combat Module", ref combatModule))
+        if (ImGuiEx.EnumCombo("Preferred Combat Module".Loc(), ref combatModule, names: CombatModuleNames))
         {
             Configuration.General.CombatModule = combatModule;
             Save();
@@ -109,14 +120,14 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             Save();
         }
 
-        if (ImGui.Combo("Preferred Mount", ref selectedMount, _mountNames, _mountNames.Length))
+        if (ImGui.Combo("Preferred Mount".Loc(), ref selectedMount, _mountNames, _mountNames.Length))
         {
             Configuration.General.MountId = _mountIds[selectedMount];
             Save();
         }
 
         int grandCompany = (int)Configuration.General.GrandCompany;
-        if (ImGui.Combo("Preferred Grand Company", ref grandCompany, _grandCompanyNames,
+        if (ImGui.Combo("Preferred Grand Company".Loc(), ref grandCompany, _grandCompanyNames,
             _grandCompanyNames.Length))
         {
             Configuration.General.GrandCompany = (GrandCompany)grandCompany;
@@ -132,7 +143,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             combatJob = 0;
         }
 
-        if (ImGui.Combo("Preferred Combat Job", ref combatJob, _classJobNames, _classJobNames.Length))
+        if (ImGui.Combo("Preferred Combat Job".Loc(), ref combatJob, _classJobNames, _classJobNames.Length))
         {
             Configuration.General.CombatJob = _classJobIds[combatJob];
             Save();
@@ -148,7 +159,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             craftingJob = 8;
         }
 
-        if (ImGui.Combo("Preferred Crafting Job", ref craftingJob, _craftJobNames, _craftJobNames.Length))
+        if (ImGui.Combo("Preferred Crafting Job".Loc(), ref craftingJob, _craftJobNames, _craftJobNames.Length))
         {
             Configuration.General.CraftingJob = _craftJobIds[craftingJob];
             Save();
@@ -164,46 +175,46 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             gatherJob = 16;
         }
 
-        if (ImGui.Combo("Preferred Gathering Job", ref gatherJob, _gatherJobNames, _gatherJobNames.Length))
+        if (ImGui.Combo("Preferred Gathering Job".Loc(), ref gatherJob, _gatherJobNames, _gatherJobNames.Length))
         {
             Configuration.General.GatheringJob = _gatherJobIds[gatherJob];
             Save();
         }
 
         Configuration.EGearsetUpdateSource gearsetSource = Configuration.General.GearsetUpdateSource;
-        if (ImGuiEx.EnumCombo("Preferred Gear Upgrade Source", ref gearsetSource))
+        if (ImGuiEx.EnumCombo("Preferred Gear Upgrade Source".Loc(), ref gearsetSource, names: GearsetUpdateSourceNames))
         {
             Configuration.General.GearsetUpdateSource = gearsetSource;
             Save();
         }
 
         ImGui.Separator();
-        ImGui.Text("UI");
+        ImGui.Text("UI".Loc());
         using (ImRaii.PushIndent())
         {
             bool hideInAllInstances = Configuration.General.HideInAllInstances;
-            if (ImGui.Checkbox("Hide quest window in all instanced duties", ref hideInAllInstances))
+            if (ImGui.Checkbox("Hide quest window in all instanced duties".Loc(), ref hideInAllInstances))
             {
                 Configuration.General.HideInAllInstances = hideInAllInstances;
                 Save();
             }
 
             bool useEscToCancelQuesting = Configuration.General.UseEscToCancelQuesting;
-            if (ImGui.Checkbox("Use ESC to cancel questing/movement", ref useEscToCancelQuesting))
+            if (ImGui.Checkbox("Use ESC to cancel questing/movement".Loc(), ref useEscToCancelQuesting))
             {
                 Configuration.General.UseEscToCancelQuesting = useEscToCancelQuesting;
                 Save();
             }
 
             bool showIncompleteSeasonalEvents = Configuration.General.ShowIncompleteSeasonalEvents;
-            if (ImGui.Checkbox("Show details for incomplete seasonal events", ref showIncompleteSeasonalEvents))
+            if (ImGui.Checkbox("Show details for incomplete seasonal events".Loc(), ref showIncompleteSeasonalEvents))
             {
                 Configuration.General.ShowIncompleteSeasonalEvents = showIncompleteSeasonalEvents;
                 Save();
             }
 
             bool hideSponsorButton = Configuration.General.HideSponsorButton;
-            if (ImGui.Checkbox("Hide Sponsor button", ref hideSponsorButton))
+            if (ImGui.Checkbox("Hide Sponsor button".Loc(), ref hideSponsorButton))
             {
                 Configuration.General.HideSponsorButton = hideSponsorButton;
                 Save();
@@ -212,18 +223,18 @@ internal sealed class GeneralConfigComponent : ConfigComponent
 
 #if REPORTING
         ImGui.Separator();
-        ImGui.Text("Bug Report");
+        ImGui.Text("Bug Report".Loc());
         using (ImRaii.PushIndent())
         {
             bool reportOptOut = Configuration.General.ReportsDisabled;
-            if (ImGui.Checkbox("Opt out of bug reports", ref reportOptOut))
+            if (ImGui.Checkbox("Opt out of bug reports".Loc(), ref reportOptOut))
             {
                 Configuration.General.ReportsDisabled = reportOptOut;
                 Configuration.General.DismissedReportWarning = true;
                 Save();
             }
             bool dismissedReportWarning = Configuration.General.DismissedReportWarning;
-            if (ImGui.Checkbox("Hide Report warning", ref dismissedReportWarning))
+            if (ImGui.Checkbox("Hide Report warning".Loc(), ref dismissedReportWarning))
             {
                 Configuration.General.DismissedReportWarning = dismissedReportWarning;
                 Save();
@@ -231,7 +242,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             if (!reportOptOut)
             {
                 string reportMessage = Configuration.General.ReportMessage;
-                if (ImGui.InputText("Report message", ref reportMessage, 256))
+                if (ImGui.InputText("Report message".Loc(), ref reportMessage, 256))
                 {
                     Configuration.General.ReportMessage = reportMessage;
                     Save();
@@ -241,11 +252,11 @@ internal sealed class GeneralConfigComponent : ConfigComponent
 #endif
 
         ImGui.Separator();
-        ImGui.Text("Questing");
+        ImGui.Text("Questing".Loc());
         using (ImRaii.PushIndent())
         {
             bool configureTextAdvance = Configuration.General.ConfigureTextAdvance;
-            if (ImGui.Checkbox("Automatically configure TextAdvance with the recommended settings",
+            if (ImGui.Checkbox("Automatically configure TextAdvance with the recommended settings".Loc(),
                 ref configureTextAdvance))
             {
                 Configuration.General.ConfigureTextAdvance = configureTextAdvance;
@@ -256,7 +267,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
                 using (ImRaii.PushIndent())
                 {
                     bool dontSkipCutscenes = Configuration.General.DontSkipCutscenes;
-                    if (ImGui.Checkbox("but don't skip cutscenes or dialogue", ref dontSkipCutscenes))
+                    if (ImGui.Checkbox("but don't skip cutscenes or dialogue".Loc(), ref dontSkipCutscenes))
                     {
                         Configuration.General.DontSkipCutscenes = dontSkipCutscenes;
                         Save();
@@ -265,7 +276,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             }
 
             bool skipLowPriorityInstances = Configuration.General.SkipLowPriorityDuties;
-            if (ImGui.Checkbox("Unlock certain optional dungeons and raids (instead of waiting for completion)", ref skipLowPriorityInstances))
+            if (ImGui.Checkbox("Unlock certain optional dungeons and raids (instead of waiting for completion)".Loc(), ref skipLowPriorityInstances))
             {
                 Configuration.General.SkipLowPriorityDuties = skipLowPriorityInstances;
                 Save();
@@ -281,11 +292,11 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             {
                 using (ImRaii.Tooltip())
                 {
-                    ImGui.Text("Questionable automatically picks up some optional quests (e.g. for aether currents, or the ARR alliance raids).");
-                    ImGui.Text("If this setting is enabled, Questionable will continue with other quests, instead of waiting for manual completion of the duty.");
+                    ImGui.Text("Questionable automatically picks up some optional quests (e.g. for aether currents, or the ARR alliance raids).".Loc());
+                    ImGui.Text("If this setting is enabled, Questionable will continue with other quests, instead of waiting for manual completion of the duty.".Loc());
 
                     ImGui.Separator();
-                    ImGui.Text("This affects the following dungeons and raids:");
+                    ImGui.Text("This affects the following dungeons and raids:".Loc());
                     foreach((uint ContentFinderConditionId, ElementId QuestId, int Sequence) lowPriorityCfc in _questRegistry.LowPriorityContentFinderConditionQuests)
                     {
                         if (_territoryData.TryGetContentFinderCondition(lowPriorityCfc.ContentFinderConditionId, out TerritoryData.ContentFinderConditionData? cfcData))
@@ -297,7 +308,7 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             }
 
             bool useTickets = Configuration.General.UseTickets;
-            if (ImGui.Checkbox("Use aetheryte tickets where available", ref useTickets))
+            if (ImGui.Checkbox("Use aetheryte tickets where available".Loc(), ref useTickets))
             {
                 Configuration.General.UseTickets = useTickets;
                 Save();
@@ -307,14 +318,13 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             {
                 using (ImRaii.Tooltip())
                 {
-                    ImGui.Text("Ideally this should be set in the in-game Teleport settings, but is provided here for convenience.");
+                    ImGui.Text("Ideally this should be set in the in-game Teleport settings, but is provided here for convenience.".Loc());
                 }
             }
 
-#if false
             ImGui.Spacing();
             bool autoStepRefreshEnabled = Configuration.General.AutoStepRefreshEnabled;
-            if (ImGui.Checkbox("Automatically refresh quest steps when stuck (WIP see tooltip)", ref autoStepRefreshEnabled))
+            if (ImGui.Checkbox("Automatically refresh quest steps when stuck (WIP see tooltip)".Loc(), ref autoStepRefreshEnabled))
             {
                 Configuration.General.AutoStepRefreshEnabled = autoStepRefreshEnabled;
                 Save();
@@ -330,9 +340,9 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             {
                 using (ImRaii.Tooltip())
                 {
-                    ImGui.Text("Questionable will automatically refresh a quest step if it appears to be stuck after the configured delay.");
-                    ImGui.Text("This helps resume automated quest completion when interruptions occur.");
-                    ImGui.Text("WIP feature, rather than remove it, this is a warning that it isn't fully complete.");
+                    ImGui.Text("Questionable will automatically refresh a quest step if it appears to be stuck after the configured delay.".Loc());
+                    ImGui.Text("This helps resume automated quest completion when interruptions occur.".Loc());
+                    ImGui.Text("WIP feature, rather than remove it, this is a warning that it isn't fully complete.".Loc());
                 }
             }
 
@@ -341,17 +351,93 @@ internal sealed class GeneralConfigComponent : ConfigComponent
                 ImGui.Indent();
                 int autoStepRefreshDelay = Configuration.General.AutoStepRefreshDelaySeconds;
                 ImGui.SetNextItemWidth(150f);
-                if (ImGui.SliderInt("Refresh delay (seconds)", ref autoStepRefreshDelay, 30, 180))
+                if (ImGui.SliderInt("Refresh delay (seconds)".Loc(), ref autoStepRefreshDelay, 30, 180))
                 {
                     Configuration.General.AutoStepRefreshDelaySeconds = autoStepRefreshDelay;
                     Save();
                 }
 
                 ImGui.TextColored(new System.Numerics.Vector4(0.7f, 0.7f, 0.7f, 1.0f),
-                    $"Quest steps will refresh automatically after {autoStepRefreshDelay} seconds if no progress is made.");
+                    "Quest steps will refresh automatically after ?? seconds if no progress is made.".Loc(autoStepRefreshDelay));
+
+                ImGui.Spacing();
+                bool nudgeOnAetheryteAttuneStuck = Configuration.General.NudgePositionOnAetheryteAttuneStuck;
+                if (ImGui.Checkbox("Nudge position after 3 repeated interruptions while attuning an aetheryte (WIP see tooltip)".Loc(), ref nudgeOnAetheryteAttuneStuck))
+                {
+                    Configuration.General.NudgePositionOnAetheryteAttuneStuck = nudgeOnAetheryteAttuneStuck;
+                    Save();
+                }
+
+                ImGui.SameLine();
+                using (ImRaii.PushFont(UiBuilder.IconFont))
+                {
+                    ImGui.TextDisabled(FontAwesomeIcon.InfoCircle.ToIconString());
+                }
+
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                {
+                    using (DisabledAwareTooltip.FullAlpha())
+                    using (ImRaii.Tooltip())
+                    {
+                        ImGui.Text("Only applies when the destination is an aetheryte crystal: if arriving and attuning keeps interrupting and retrying 3 times in a row, Questionable will walk a short random distance and recalculate the route from there, instead of waiting for the delay above.".Loc());
+                        ImGui.Text("Does not teleport anywhere - only a small (1.5-3 yalm) walk, meant to nudge vnavmesh/the game out of a bad position or facing.".Loc());
+                        ImGui.Text("Other kinds of interaction failures are not handled by this - only repeated aetheryte attunement failures.".Loc());
+                    }
+                }
+
+                ImGui.Spacing();
+                float movementStuckGraceSeconds = Configuration.General.MovementStuckGraceSeconds;
+                ImGui.SetNextItemWidth(150f);
+                if (ImGui.DragFloat("Movement stuck grace period (seconds)".Loc(), ref movementStuckGraceSeconds, 0.1f, 1f, 8f, "%.1f"))
+                {
+                    Configuration.General.MovementStuckGraceSeconds = movementStuckGraceSeconds;
+                    Save();
+                }
+
+                ImGui.SameLine();
+                using (ImRaii.PushFont(UiBuilder.IconFont))
+                {
+                    ImGui.TextDisabled(FontAwesomeIcon.InfoCircle.ToIconString());
+                }
+
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                {
+                    using (DisabledAwareTooltip.FullAlpha())
+                    using (ImRaii.Tooltip())
+                    {
+                        ImGui.Text("How long the character can move (running-in-place / stuck against geometry, near-zero actual displacement) before Questionable tries something else - jumping, or recalculating the route from the current position. This is separate from the 'stuck quest step' settings above; it reacts within seconds, not the delay set there.".Loc());
+                        ImGui.Text("Lower = looks less suspicious standing/running in place, but reacts to brief, harmless hitches too - can cause more frequent route recalculations. Default 2.5s.".Loc());
+                    }
+                }
+
+                ImGui.Spacing();
+                float interactionRangeStopDistance = Configuration.General.InteractionRangeStopDistance;
+                ImGui.SetNextItemWidth(150f);
+                if (ImGui.DragFloat("Stop when already close enough to interact (yalms, 0 to disable)".Loc(), ref interactionRangeStopDistance, 0.1f,
+                        0f, 15f, "%.1f"))
+                {
+                    Configuration.General.InteractionRangeStopDistance = interactionRangeStopDistance;
+                    Save();
+                }
+
+                ImGui.SameLine();
+                using (ImRaii.PushFont(UiBuilder.IconFont))
+                {
+                    ImGui.TextDisabled(FontAwesomeIcon.InfoCircle.ToIconString());
+                }
+
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                {
+                    using (DisabledAwareTooltip.FullAlpha())
+                    using (ImRaii.Tooltip())
+                    {
+                        ImGui.Text("When the target is an NPC or event object with an obstacle in the way, movement would keep pushing toward the exact destination and get stuck against the obstacle. If you are already close enough to interact and stop making progress for the grace period above, Questionable stops moving and lets the interaction be attempted from where you stand.".Loc());
+                        ImGui.Text("Questionable only considers stopping once you are within this distance, and then asks the game's own interact range check to confirm. Set to 0 to disable and always walk all the way in. Default 7 yalms.".Loc());
+                    }
+                }
+
                 ImGui.Unindent();
             }
-#endif
         }
     }
 }

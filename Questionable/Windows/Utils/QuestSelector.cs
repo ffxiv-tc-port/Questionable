@@ -1,4 +1,5 @@
 using Dalamud.Bindings.ImGui;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Model;
 using Questionable.Model.Questing;
@@ -23,10 +24,11 @@ internal sealed class QuestSelector(QuestRegistry questRegistry)
         }
 
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-        if (ImGui.BeginCombo("##QuestSelection", "Add Quest...", ImGuiComboFlags.HeightLarge))
+        if (ImGui.BeginCombo("##QuestSelection", "Add Quest...".Loc(), ImGuiComboFlags.HeightLarge))
         {
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            bool addFirst = ImGui.InputTextWithHint("", "Filter...", ref _searchString, 256,
+            // 下拉清單本身是獨立視窗，根層不可用空標籤（ImGui 會斷言 id != window->ID）。
+            bool addFirst = ImGui.InputTextWithHint("##QuestSelectionFilter", "Filter...".Loc(), ref _searchString, 256,
                 ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue);
 
             IEnumerable<Quest> foundQuests;

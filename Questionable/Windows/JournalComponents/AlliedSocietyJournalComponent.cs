@@ -3,6 +3,8 @@ using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using Dalamud.Plugin;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Questionable.Controller;
 using Questionable.Data;
@@ -24,8 +26,13 @@ internal sealed class AlliedSocietyJournalComponent
     QuestRegistry questRegistry,
     QuestJournalUtils questJournalUtils,
     QuestTooltipComponent questTooltipComponent,
-    UiUtils uiUtils)
+    UiUtils uiUtils,
+    Configuration configuration,
+    IDalamudPluginInterface pluginInterface)
 {
+    private static readonly EAlliedSociety[] AlliedSocieties =
+        Enum.GetValues<EAlliedSociety>().Where(x => x != EAlliedSociety.None).ToArray();
+    private readonly SocietyRow[] _rows = AlliedSocieties.Select(x => new SocietyRow(x)).ToArray();
     private static readonly string[] RankNames =
         ["Neutral", "Recognized", "Friendly", "Trusted", "Respected", "Honored", "Sworn", "Allied"];
     private readonly AlliedSocietyQuestFunctions _alliedSocietyQuestFunctions = alliedSocietyQuestFunctions;
@@ -37,17 +44,19 @@ internal sealed class AlliedSocietyJournalComponent
     private readonly QuestRegistry _questRegistry = questRegistry;
     private readonly QuestTooltipComponent _questTooltipComponent = questTooltipComponent;
     private readonly UiUtils _uiUtils = uiUtils;
+    private readonly Configuration _configuration = configuration;
+    private readonly IDalamudPluginInterface _pluginInterface = pluginInterface;
 
     public void DrawAlliedSocietyQuests()
     {
-        using ImRaii.TabItemDisposable tab = ImRaii.TabItem("Allied Societies");
+        using var tab = ImRaii.TabItem("Allied Societies".Loc());
         if (!tab)
         {
             return;
         }
         bool addPending = false;
 #if DEBUG
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Plus, "Add"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Plus, "Add".Loc()))
         {
             addPending = true;
         }
@@ -57,18 +66,31 @@ internal sealed class AlliedSocietyJournalComponent
         unsafe
         {
             uint allowances = QuestManager.Instance()->GetBeastTribeAllowance();
-            ImGui.Text($"Remaining: {allowances}/12");
+            ImGui.Text($"{"Remaining".Loc()}: {allowances}/12");
         }
 
-        foreach(EAlliedSociety alliedSociety in Enum.GetValues<EAlliedSociety>().Where(x => x != EAlliedSociety.None))
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(
+            "Tick the box in front of an allied society: pressing Start will then accept that society's daily quests for today and complete them in order (within the remaining allowance).".Loc());
+
+        foreach(SocietyRow row in _rows)
         {
-            List<IQuestInfo> quests = _alliedSocietyQuestFunctions.GetAvailableAlliedSocietyQuests(alliedSociety)
-                .Select(x => _questData.GetQuestInfo(x))
-                .ToList();
+            EAlliedSociety alliedSociety = row.Society;
+            int availabilityKey = _alliedSocietyQuestFunctions.GetAvailabilityKey(alliedSociety);
+            if (availabilityKey != row.AvailabilityKey)
+            {
+                row.Quests = _alliedSocietyQuestFunctions.GetAvailableAlliedSocietyQuests(alliedSociety)
+                    .Select(x => _questData.GetQuestInfo(x))
+                    .ToList();
+                row.AvailabilityKey = availabilityKey;
+            }
+            List<IQuestInfo> quests = row.Quests;
             //if (quests.Count == 0)
             //    continue;
 
-            string label = $"{alliedSociety}###AlliedSociety{(int)alliedSociety}";
+            DrawAutoQueueCheckbox(row);
+
+            string label = row.Label;
             bool isOpen;
 
             using (ImRaii.Disabled(quests.Count == 0))
@@ -90,7 +112,7 @@ internal sealed class AlliedSocietyJournalComponent
                 }
                 else
 #endif
-                if (quests.Any(x => !_questFunctions.IsQuestComplete(x.QuestId)))
+                if (HasIncompleteQuest(quests))
                 {
                     using (ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.DalamudYellow))
                     {
@@ -103,7 +125,7 @@ internal sealed class AlliedSocietyJournalComponent
                 }
             }
 
-            _questJournalUtils.ShowQuestGroupContextMenu($"DrawAlliedSocietyQuests{alliedSociety}", quests);
+            _questJournalUtils.ShowQuestGroupContextMenu(row.MenuNote, quests);
 
             if (!isOpen)
             {
@@ -120,7 +142,7 @@ internal sealed class AlliedSocietyJournalComponent
                         continue;
                     }
 
-                    ImGui.Text(RankNames[i - 1]);
+                    ImGui.Text(RankNames[i - 1].Loc());
                     _questJournalUtils.ShowQuestGroupContextMenu($"DrawAlliedSocietyQuests{alliedSociety}/{RankNames[i - 1]}", questsByRank);
                     foreach(IQuestInfo quest in questsByRank)
                     {
@@ -136,6 +158,55 @@ internal sealed class AlliedSocietyJournalComponent
                 }
             }
         }
+    }
+
+    private void DrawAutoQueueCheckbox(SocietyRow row)
+    {
+        HashSet<EAlliedSociety> autoQueue = _configuration.General.AutoQueueAlliedSocietyDailies;
+        bool enabled = autoQueue.Contains(row.Society);
+        if (ImGui.Checkbox(row.AutoQueueId, ref enabled))
+        {
+            if (enabled)
+            {
+                autoQueue.Add(row.Society);
+            }
+            else
+            {
+                autoQueue.Remove(row.Society);
+            }
+
+            _pluginInterface.SavePluginConfig(_configuration);
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("Automatically accept today's daily quests for this allied society when pressing Start".Loc());
+        }
+
+        ImGui.SameLine();
+    }
+
+    private bool HasIncompleteQuest(List<IQuestInfo> quests)
+    {
+        foreach(IQuestInfo quest in quests)
+        {
+            if (!_questFunctions.IsQuestComplete(quest.QuestId))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>一個部族的標題字串與「可接任務」快取；<see cref="Quests"/> 只在 <see cref="AvailabilityKey"/> 變了才重算。</summary>
+    private sealed class SocietyRow(EAlliedSociety society)
+    {
+        public EAlliedSociety Society { get; } = society;
+        public string Label { get; } = $"{society}###AlliedSociety{(int)society}";
+        public string MenuNote { get; } = $"DrawAlliedSocietyQuests{society}";
+        public string AutoQueueId { get; } = $"##AutoQueueAlliedSociety{(int)society}";
+        public int AvailabilityKey { get; set; } = -1;
+        public List<IQuestInfo> Quests { get; set; } = [];
     }
 
     private void DrawQuest(QuestInfo questInfo, bool addPending = false)

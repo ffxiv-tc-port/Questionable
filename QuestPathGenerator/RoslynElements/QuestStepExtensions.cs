@@ -65,6 +65,11 @@ internal static class QuestStepExtensions
                             Assignment(nameof(QuestStep.RestartNavigationIfCancelled),
                                     step.RestartNavigationIfCancelled, emptyStep.RestartNavigationIfCancelled)
                                 .AsSyntaxNodeOrToken(),
+                            Assignment(nameof(QuestStep.AllowHighQuality), step.AllowHighQuality,
+                                    emptyStep.AllowHighQuality)
+                                .AsSyntaxNodeOrToken(),
+                            Assignment(nameof(QuestStep.ItemQuality), step.ItemQuality, emptyStep.ItemQuality)
+                                .AsSyntaxNodeOrToken(),
                             Assignment(nameof(QuestStep.Comment), step.Comment, emptyStep.Comment)
                                 .AsSyntaxNodeOrToken(),
                             Assignment(nameof(QuestStep.Aetheryte), step.Aetheryte, emptyStep.Aetheryte)

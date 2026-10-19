@@ -214,6 +214,74 @@
       "Sequence": 9,
       "Steps": [
         {
+          "$": "Only while Camp Overlook is locked: walk in from Camp Bronze Lake (route from 1098 The Last Remnants)",
+          "Position": {
+            "X": 287.2875,
+            "Y": 41.545933,
+            "Z": -200.75758
+          },
+          "TerritoryId": 139,
+          "InteractionType": "WalkTo",
+          "Fly": true,
+          "AetheryteShortcut": "Upper La Noscea - Camp Bronze Lake",
+          "SkipConditions": {
+            "StepIf": {
+              "InTerritory": [180],
+              "AetheryteUnlocked": "Outer La Noscea - Camp Overlook"
+            },
+            "AetheryteShortcutIf": {
+              "InTerritory": [139, 180],
+              "AetheryteUnlocked": "Outer La Noscea - Camp Overlook"
+            }
+          }
+        },
+        {
+          "$": "Only while Camp Overlook is locked: zone line to Outer La Noscea",
+          "Position": {
+            "X": 285.82883,
+            "Y": 42.26685,
+            "Z": -203.32939
+          },
+          "TerritoryId": 139,
+          "InteractionType": "WalkTo",
+          "TargetTerritoryId": 180,
+          "SkipConditions": {
+            "StepIf": {
+              "InTerritory": [180],
+              "AetheryteUnlocked": "Outer La Noscea - Camp Overlook"
+            }
+          }
+        },
+        {
+          "$": "Only while Camp Overlook is locked",
+          "Position": {
+            "X": -114.35803,
+            "Y": 64.464615,
+            "Z": -217.34372
+          },
+          "TerritoryId": 180,
+          "InteractionType": "WalkTo",
+          "Fly": true,
+          "SkipConditions": {
+            "StepIf": {
+              "NotInTerritory": [180],
+              "AetheryteUnlocked": "Outer La Noscea - Camp Overlook"
+            }
+          }
+        },
+        {
+          "$": "Only while Camp Overlook is locked",
+          "TerritoryId": 180,
+          "InteractionType": "AttuneAetheryte",
+          "Aetheryte": "Outer La Noscea - Camp Overlook",
+          "SkipConditions": {
+            "StepIf": {
+              "NotInTerritory": [180],
+              "AetheryteUnlocked": "Outer La Noscea - Camp Overlook"
+            }
+          }
+        },
+        {
           "DataId": 1010574,
           "Position": {
             "X": -76.98181,

@@ -3,6 +3,7 @@ using ECommons.ExcelServices;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Group;
 using Microsoft.Extensions.Logging;
+using Questionable.Data;
 using System;
 namespace Questionable.Controller.Utils;
 
@@ -12,15 +13,17 @@ internal sealed class PartyWatchDog : IDisposable
     private readonly IClientState _clientState;
     private readonly ILogger<PartyWatchDog> _logger;
     private readonly QuestController _questController;
+    private readonly TerritoryData _territoryData;
 
     private uint? _uncheckedTeritoryId;
 
     public PartyWatchDog(QuestController questController, IClientState clientState, IChatGui chatGui,
-        ILogger<PartyWatchDog> logger)
+        TerritoryData territoryData, ILogger<PartyWatchDog> logger)
     {
         _questController = questController;
         _clientState = clientState;
         _chatGui = chatGui;
+        _territoryData = territoryData;
         _logger = logger;
 
         _clientState.TerritoryChanged += TerritoryChanged;
@@ -31,9 +34,9 @@ internal sealed class PartyWatchDog : IDisposable
         _clientState.TerritoryChanged -= TerritoryChanged;
     }
 
-    private unsafe void TerritoryChanged(uint newTerritoryId)
+    private void TerritoryChanged(ushort newTerritoryId)
     {
-        TerritoryIntendedUseEnum intendedUse = (TerritoryIntendedUseEnum)GameMain.Instance()->CurrentTerritoryIntendedUseId;
+        TerritoryIntendedUseEnum intendedUse = (TerritoryIntendedUseEnum)_territoryData.GetIntendedUse(newTerritoryId);
         switch (intendedUse)
         {
             case TerritoryIntendedUseEnum.Gaol:
@@ -105,7 +108,10 @@ internal sealed class PartyWatchDog : IDisposable
             _chatGui.PrintError(
                 $"Stopping Questionable: {reason}. If you believe this to be correct, please restart Questionable manually.",
                 CommandHandler.MessageTag, CommandHandler.TagColor);
-            _questController.Stop(reason);
+
+            // 這條路徑一律是「自動任務被迫中斷、要人來看一下」——上面那句訊息本身就寫著
+            // 「請自行重新啟動」。狀態邊緣由 Stop() 內部的 IsRunning/AutomationType 判斷保證。
+            _questController.Stop(reason, true);
         }
     }
 }

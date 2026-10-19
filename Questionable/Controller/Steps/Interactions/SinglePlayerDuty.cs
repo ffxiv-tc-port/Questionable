@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
@@ -13,6 +14,7 @@ using Questionable.External;
 using Questionable.Functions;
 using Questionable.Model;
 using Questionable.Model.Questing;
+using Questionable.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -35,7 +37,8 @@ internal static class SinglePlayerDuty
         TerritoryData territoryData,
         IObjectTable objectTable,
         ICondition condition,
-        IClientState clientState) : ITaskFactory
+        IClientState clientState,
+        Configuration configuration) : ITaskFactory
     {
         public IEnumerable<ITask> CreateAllTasks(Quest quest, QuestSequence sequence, QuestStep step)
         {
@@ -118,13 +121,23 @@ internal static class SinglePlayerDuty
 
                 yield return new WaitSinglePlayerDuty(cfcId);
                 yield return new DisableAi();
+                if (configuration.SinglePlayerDuties.StopOnFailure)
+                {
+                    yield return new WaitDutyOutcome(quest.Id, sequence.Sequence, cfcId);
+                }
+
                 yield return new WaitAtEnd.WaitNextStepOrSequence();
             }
         }
 
         private unsafe bool DutyActionsAvailable()
         {
-            return RaptureHotbarModule.Instance()->DutyActionsPresent;
+            // 🔴 RaptureHotbarModule.Instance() 是手寫包裝，UIModule 還沒建好時合法回 null；
+            //    對 null 解參考是 try/catch 攔不到的 AccessViolation。
+            // fail-closed：回 false＝「任務技能還沒出現」＝輪詢述詞繼續等；回 true 會讓流程誤判階段已推進
+            //    而提早 EnableAi(true)。這是輪詢述詞，刻意不寫 log。
+            RaptureHotbarModule* hotbarModule = RaptureHotbarModule.Instance();
+            return hotbarModule != null && hotbarModule->DutyActionsPresent;
         }
     }
 
@@ -290,6 +303,81 @@ internal static class SinglePlayerDuty
         }
     }
 
+    internal sealed record WaitDutyOutcome(ElementId QuestId, byte Sequence, uint ContentFinderConditionId) : ITask
+    {
+        public override string ToString()
+        {
+            return $"Wait(BossMod, quest progress after instance {ContentFinderConditionId})";
+        }
+    }
+
+    /// <summary>
+    /// 離開任務戰鬥副本之後等任務進度前進；等不到就當成戰鬥失敗，停下自動任務並求助，不重試。
+    /// </summary>
+    /// <remarks>
+    /// 成功時 <see cref="QuestController"/> 一看到任務序列前進就清空佇列，這個執行器不會再被呼叫
+    /// ⇒ 它還在跑本身就代表進度沒有前進。計時只算真的有被呼叫的時間：讀取畫面、過場、
+    /// 對話中控制器不呼叫 Update，那段時間不算；回到副本裡（手動重打）時歸零。
+    /// 判定前再直接讀一次遊戲的任務序列：已經不是建立任務時那一段（控制器只是還沒跟上）就不判失敗。
+    /// </remarks>
+    internal sealed class WaitDutyOutcomeExecutor
+    (
+        ICondition condition,
+        QuestController questController,
+        QuestFunctions questFunctions,
+        TerritoryData territoryData) : TaskExecutor<WaitDutyOutcome>
+    {
+        private static readonly TimeSpan NoProgressLimit = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan MaxCreditPerUpdate = TimeSpan.FromMilliseconds(250);
+
+        private TimeSpan _outsideWithoutProgress;
+        private DateTime _lastUpdate;
+
+        protected override bool Start()
+        {
+            _lastUpdate = DateTime.Now;
+            return true;
+        }
+
+        public override ETaskResult Update()
+        {
+            DateTime now = DateTime.Now;
+            TimeSpan sinceLastUpdate = now - _lastUpdate;
+            _lastUpdate = now;
+
+            if (condition[ConditionFlag.BoundByDuty])
+            {
+                _outsideWithoutProgress = TimeSpan.Zero;
+                return ETaskResult.StillRunning;
+            }
+
+            _outsideWithoutProgress += sinceLastUpdate < MaxCreditPerUpdate ? sinceLastUpdate : MaxCreditPerUpdate;
+            if (_outsideWithoutProgress < NoProgressLimit)
+            {
+                return ETaskResult.StillRunning;
+            }
+
+            if (Task.QuestId is QuestId &&
+                questFunctions.GetQuestProgressInfo(Task.QuestId)?.Sequence != Task.Sequence)
+            {
+                _outsideWithoutProgress = TimeSpan.Zero;
+                return ETaskResult.StillRunning;
+            }
+
+            string dutyName = territoryData.GetContentFinderCondition(Task.ContentFinderConditionId)?.Name ?? "?";
+            questController.StopAfterSinglePlayerDutyFailure(Task.ContentFinderConditionId, dutyName,
+                $"離開副本後 {NoProgressLimit.TotalSeconds:F0} 秒任務進度沒有前進");
+
+            // 上面那一行已經清空佇列；照 StillRunning 回去，呼叫端不會再碰這個執行器。
+            return ETaskResult.StillRunning;
+        }
+
+        public override bool ShouldInterruptOnDamage()
+        {
+            return false;
+        }
+    }
+
     internal sealed class DisableAiExecutor
     (
         BossModIpc bossModIpc) : TaskExecutor<DisableAi>
@@ -374,7 +462,10 @@ internal static class SinglePlayerDuty
         {
             if (GenericHelpers.TryGetAddonMaster(out AddonMaster.ContentsFinderConfirm m) && m.IsAddonReady)
             {
-                if (EzThrottler.Throttle("Confirm", 2000))
+                // EzThrottler 記的是「上一次動作在哪個時刻」而不是「這扇窗按過了」，
+                // 而且 key 全外掛共用、首次必放行 —— 真正擋住重按的是守衛。
+                if (EzThrottler.Throttle("Confirm", 2000) &&
+                    AddonPressGuard.TryBeginPress("ContentsFinderConfirm", m.Base, "commence"))
                 {
                     m.Commence();
                 }

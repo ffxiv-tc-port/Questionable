@@ -3,6 +3,7 @@ using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Plugin.Services;
 using ECommons.ExcelServices;
+using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -38,9 +39,14 @@ internal static class Gather
 
     internal sealed record DelayedGatheringTask(GatheredItem GatheredItem, Quest Quest, byte Sequence, QuestStep Step) : ITask
     {
+        /// <summary>已經為這個道具自動換過職業；職業仍對不上就停下請玩家自己換，不再換第二次。</summary>
+        public Job? SwitchedToClassJob { get; init; }
+
         public override string ToString()
         {
-            return $"Gathering(pending for {GatheredItem.ItemId})";
+            return SwitchedToClassJob is { } job
+                ? $"Gathering(pending for {GatheredItem.ItemId}, after switching to {job})"
+                : $"Gathering(pending for {GatheredItem.ItemId})";
         }
     }
 
@@ -51,6 +57,7 @@ internal static class Gather
         IClientState clientState,
         IObjectTable objectTable,
         IServiceProvider serviceProvider,
+        IDataManager dataManager,
         ILogger<DelayedGatheringExecutor> logger) : TaskExecutor<DelayedGatheringTask>, IExtraTaskCreator
     {
         public override ETaskResult Update()
@@ -69,7 +76,32 @@ internal static class Gather
             else if (!gatheringPointRegistry.TryGetGatheringPointId(Task.GatheredItem.ItemId, currentClassJob,
                 out gatheringPointId))
             {
-                throw new TaskException($"No gathering point found for item {Task.GatheredItem.ItemId}");
+                uint itemId = Task.GatheredItem.ItemId;
+                List<Job> gatheringJobs = new[] { Job.MIN, Job.BTN }
+                    .Where(x => gatheringPointRegistry.TryGetGatheringPointId(itemId, x, out _))
+                    .ToList();
+                if (gatheringJobs.Count > 0)
+                {
+                    string reason = $"No gathering point found for item {itemId} as {currentClassJob}, gatherable as {string.Join("/", gatheringJobs)}";
+                    string chatMessage =
+                        "Switch to ?? first: your current job (??) has no gathering point for ??. Automatic questing has been stopped; press Start again after switching.".Loc(
+                            string.Join("/", gatheringJobs.Select(GetJobName)), GetJobName(currentClassJob), GetItemName(itemId));
+                    if (Task.SwitchedToClassJob is { } attemptedJob)
+                    {
+                        throw new ManualActionRequiredException($"{reason}; switching to {attemptedJob} did not take effect", chatMessage);
+                    }
+
+                    // 照釣魚步驟的先例先下坐騎再換套組；沒有套組時由 SwitchClassJob 擲出同一句提示，
+                    // 換了卻沒生效則由下面重排的同一個工作再判一次（只換一次，不會循環）。
+                    Job targetJob = gatheringJobs[0];
+                    logger.LogInformation("{Reason}, switching to {TargetJob} first", reason, targetJob);
+                    yield return new Mount.UnmountTask();
+                    yield return new SwitchClassJob.Task(targetJob) { ManualActionChatMessage = chatMessage };
+                    yield return Task with { SwitchedToClassJob = targetJob };
+                    yield break;
+                }
+
+                throw new TaskException($"No gathering point found for item {itemId}");
             }
 
             if (!gatheringPointRegistry.TryGetGatheringPoint(gatheringPointId, out GatheringRoot? gatheringRoot))
@@ -132,6 +164,21 @@ internal static class Gather
         protected override bool Start()
         {
             return true;
+        }
+
+        /// <summary>遊戲表裡的名稱（台服即繁中）；查不到時退回列舉名或編號。</summary>
+        private string GetJobName(Job job)
+        {
+            string? name = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>()
+                .GetRowOrDefault((uint)job)?.Name.ToString();
+            return string.IsNullOrEmpty(name) ? job.ToString() : name;
+        }
+
+        private string GetItemName(uint itemId)
+        {
+            string? name = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>()
+                .GetRowOrDefault(itemId)?.Name.ToString();
+            return string.IsNullOrEmpty(name) ? itemId.ToString(System.Globalization.CultureInfo.InvariantCulture) : name;
         }
 
         private unsafe bool HasRequiredItems(GatheredItem itemToGather)

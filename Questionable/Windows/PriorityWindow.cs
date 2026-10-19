@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Functions;
 using Questionable.Model;
@@ -25,6 +26,10 @@ internal sealed class PriorityWindow : LWindow
     private const string ClipboardPrefix = "qst:priority:";
     private const string LegacyClipboardPrefix = "qst:v1:";
     private const char ClipboardSeparator = ';';
+
+    /// <summary>列上「缺幾個前置任務」的重算間隔，見 <see cref="RefreshMissingPrerequisites"/>。</summary>
+    private static readonly TimeSpan MissingPrerequisitesInterval = TimeSpan.FromSeconds(1);
+
     private readonly IChatGui _chatGui;
     private readonly IDalamudPluginInterface _pluginInterface;
 
@@ -35,12 +40,15 @@ internal sealed class PriorityWindow : LWindow
     private readonly QuestTooltipComponent _questTooltipComponent;
     private readonly UiUtils _uiUtils;
 
+    private readonly Dictionary<ElementId, List<Quest>> _missingPrerequisites = [];
+
     private ElementId? _draggedItem;
+    private DateTime _missingPrerequisitesRefreshedAt = DateTime.MinValue;
 
     public PriorityWindow(QuestController questController, QuestFunctions questFunctions, QuestSelector questSelector,
         QuestTooltipComponent questTooltipComponent, UiUtils uiUtils, IChatGui chatGui, QuestRegistry questRegistry,
         IDalamudPluginInterface pluginInterface)
-        : base("Quest Priority###QuestionableQuestPriority")
+        : base("Quest Priority".Loc() + "###QuestionableQuestPriority")
     {
         _questController = questController;
         _questFunctions = questFunctions;
@@ -69,46 +77,46 @@ internal sealed class PriorityWindow : LWindow
 
     public override void DrawContent()
     {
-        if (ImGui.CollapsingHeader("Explanation"))
+        if (ImGui.CollapsingHeader("Explanation".Loc()))
         {
             ImGui.TextWrapped(
-                "Questionable will generally try to do:");
-            ImGui.BulletText("Priority quests added below, in order");
-            ImGui.BulletText("'Priority' quests: class quests, ARR primals, ARR raids");
+                "Questionable will generally try to do:".Loc());
+            ImGui.BulletText("Priority quests added below, in order".Loc());
+            ImGui.BulletText("'Priority' quests: class quests, ARR primals, ARR raids".Loc());
             ImGui.BulletText(
-                "Supported quests in your 'To-Do list'\n(quests from your Quest Journal that are always on-screen)");
-            ImGui.BulletText("MSQ quest (if available, unless it is marked as 'ignored'\nin your Journal)");
+                "Supported quests in your 'To-Do list'\n(quests from your Quest Journal that are always on-screen)".Loc());
+            ImGui.BulletText("MSQ quest (if available, unless it is marked as 'ignored'\nin your Journal)".Loc());
             ImGui.TextWrapped(
-                "If you don't have any active MSQ quest and there is no Priority Quest added here, it will always try to pick up the next quest in the MSQ first.");
+                "If you don't have any active MSQ quest and there is no Priority Quest added here, it will always try to pick up the next quest in the MSQ first.".Loc());
         }
         ImGui.Separator();
         ImGui.Spacing();
-        ImGui.Text("Quests to do first:");
+        ImGui.Text("Quests to do first:".Loc());
         _questSelector.DrawSelection();
         DrawQuestList();
 
         List<ElementId> clipboardItems = ParseClipboardItems();
         ImGui.BeginDisabled(clipboardItems.Count == 0);
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, "Import from Clipboard"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, "Import from Clipboard".Loc()))
         {
             ImportFromClipboard(clipboardItems);
         }
         ImGui.EndDisabled();
         ImGui.SameLine();
         ImGui.BeginDisabled(_questController.ManualPriorityQuests.Count == 0);
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Upload, "Export to Clipboard"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Upload, "Export to Clipboard".Loc()))
         {
             ExportToClipboard();
         }
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Check, "Remove finished Quests"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Check, "Remove finished Quests".Loc()))
         {
-            _questController.ManualPriorityQuests.RemoveAll(q => _questFunctions.IsQuestComplete(q.Id));
+            _questController.ManualPriorityQuests.RemoveAll(q => _questFunctions.IsQuestFinishedForPriorityRemoval(q.Id));
         }
         ImGui.SameLine();
 
         using (ImRaii.Disabled(!ImGui.IsKeyDown(ImGuiKey.ModCtrl)))
         {
-            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Trash, "Clear All"))
+            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Trash, "Clear All".Loc()))
             {
                 _questController.ClearQuestPriority();
             }
@@ -116,7 +124,7 @@ internal sealed class PriorityWindow : LWindow
 
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
         {
-            ImGui.SetTooltip("Hold CTRL to enable this button.");
+            DisabledAwareTooltip.SetTooltip("Hold CTRL to enable this button.".Loc());
         }
 
         ImGui.EndDisabled();
@@ -127,7 +135,10 @@ internal sealed class PriorityWindow : LWindow
         List<Quest> priorityQuests = _questController.ManualPriorityQuests;
         Quest? itemToRemove = null;
         Quest? itemToAdd = null;
+        Quest? itemToAddPrerequisitesFor = null;
         int indexToAdd = 0;
+
+        RefreshMissingPrerequisites(priorityQuests, false);
 
         float width = ImGui.GetContentRegionAvail().X;
         List<(Vector2 TopLeft, Vector2 BottomRight)> itemPositions = [];
@@ -224,6 +235,19 @@ internal sealed class PriorityWindow : LWindow
                 {
                     itemToRemove = quest;
                 }
+
+                if (_missingPrerequisites.TryGetValue(quest.Id, out List<Quest>? missing) && missing.Count > 0)
+                {
+                    string count = missing.Count >= QuestController.MaxPrerequisitesPerAdd
+                        ? $"{missing.Count}+"
+                        : $"{missing.Count}";
+                    ImGui.TextColored(ImGuiColors.DalamudYellow, $"{"Missing prerequisite quests".Loc()}: {count}");
+                    ImGui.SameLine();
+                    if (ImGui.SmallButton("Add Prerequisites".Loc()))
+                    {
+                        itemToAddPrerequisitesFor = quest;
+                    }
+                }
             }
 
             Vector2 bottomRight = new(topLeft.X + width,
@@ -252,6 +276,8 @@ internal sealed class PriorityWindow : LWindow
             }
         }
 
+        // 清單的增刪一律等整個迴圈跑完才動：迴圈本身是用索引走這個清單，
+        // 而且 itemPositions 的每一項要對得上同一輪的列。
         if (itemToRemove != null)
         {
             priorityQuests.Remove(itemToRemove);
@@ -262,6 +288,40 @@ internal sealed class PriorityWindow : LWindow
             priorityQuests.Remove(itemToAdd);
             priorityQuests.Insert(indexToAdd, itemToAdd);
         }
+
+        if (itemToAddPrerequisitesFor != null)
+        {
+            int added = _questController.AddMissingPrerequisites(itemToAddPrerequisitesFor);
+            _chatGui.Print($"{"Added prerequisite quests to the priority list".Loc()}: {added}",
+                CommandHandler.MessageTag, CommandHandler.TagColor);
+        }
+
+        if (itemToRemove != null || itemToAddPrerequisitesFor != null)
+        {
+            RefreshMissingPrerequisites(priorityQuests, true);
+        }
+    }
+
+    /// <summary>
+    /// 重算每一列「還缺幾個前置任務」。這只是列上的提示數字，而每次重算都要走訪整條前置鏈，
+    /// 所以節流成每秒一次；清單在這個視窗裡被改動時強制重算。
+    /// ⚠️ 數字最多可能慢一秒（例如剛從別處匯入），但按鈕按下去時是當場重算的，動作永遠是對的。
+    /// 只在繪製執行緒上讀寫，不需要鎖。
+    /// </summary>
+    private void RefreshMissingPrerequisites(List<Quest> priorityQuests, bool force)
+    {
+        if (!force && DateTime.Now < _missingPrerequisitesRefreshedAt + MissingPrerequisitesInterval)
+        {
+            return;
+        }
+
+        _missingPrerequisites.Clear();
+        foreach(Quest quest in priorityQuests)
+        {
+            _missingPrerequisites[quest.Id] = _questController.GetMissingPrerequisiteQuests(quest);
+        }
+
+        _missingPrerequisitesRefreshedAt = DateTime.Now;
     }
 
     private static List<ElementId> ParseClipboardItems()

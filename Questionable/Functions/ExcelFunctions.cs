@@ -19,7 +19,13 @@ internal sealed class ExcelFunctions(IDataManager dataManager, ILogger<ExcelFunc
     private readonly IDataManager _dataManager = dataManager;
     private readonly ILogger<ExcelFunctions> _logger = logger;
 
-    public StringOrRegex GetDialogueText(Quest? currentQuest, string? excelSheetName, string key, bool isRegex)
+    /// <param name="macroTemplate">
+    /// 傳 <see langword="true"/> 時，非 regex 的表文字若含代入文字的巨集，改回整句錨定樣板
+    /// （<see cref="DataManagerExtensions.ToScreenTemplate"/>），否則逐字比恆不相等。
+    /// 要把文字送出去（例如 <c>Say</c>）的呼叫端維持預設，拿到的仍是字串。
+    /// </param>
+    public StringOrRegex GetDialogueText(Quest? currentQuest, string? excelSheetName, string key, bool isRegex,
+        bool macroTemplate = false)
     {
         ReadOnlySeString? seString = GetRawDialogueText(currentQuest, excelSheetName, key);
         // Return empty string if dialogue text lookup fails to prevent ArgumentNullException
@@ -32,6 +38,10 @@ internal sealed class ExcelFunctions(IDataManager dataManager, ILogger<ExcelFunc
         if (isRegex)
         {
             return new(seString.ToRegex());
+        }
+        else if (macroTemplate && seString.Value.ToScreenTemplate() is { } template)
+        {
+            return new(template);
         }
         else
         {
@@ -68,12 +78,17 @@ internal sealed class ExcelFunctions(IDataManager dataManager, ILogger<ExcelFunc
         }
     }
 
-    public StringOrRegex GetDialogueTextByRowId(string? excelSheet, uint rowId, bool isRegex)
+    /// <param name="macroTemplate">同 <see cref="GetDialogueText"/> 的同名參數。</param>
+    public StringOrRegex GetDialogueTextByRowId(string? excelSheet, uint rowId, bool isRegex, bool macroTemplate = false)
     {
         ReadOnlySeString? seString = GetRawDialogueTextByRowId(excelSheet, rowId);
         if (isRegex)
         {
             return new(seString.ToRegex());
+        }
+        else if (macroTemplate && seString?.ToScreenTemplate() is { } template)
+        {
+            return new(template);
         }
         else
         {
@@ -102,7 +117,7 @@ internal sealed class ExcelFunctions(IDataManager dataManager, ILogger<ExcelFunc
         else if (excelSheet == "GimmickYesNo")
         {
             GimmickYesNo? questRow = _dataManager.GetExcelSheet<GimmickYesNo>().GetRowOrDefault(rowId);
-            return questRow?.YesButton;
+            return questRow?.Unknown0;
         }
         else if (excelSheet == "Warp")
         {

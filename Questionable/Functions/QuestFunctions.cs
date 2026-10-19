@@ -9,6 +9,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
+using Microsoft.Extensions.Logging;
 using Questionable.Controller;
 using Questionable.Data;
 using Questionable.Model;
@@ -22,6 +23,7 @@ using System.Globalization;
 using System.Linq;
 using GrandCompany = FFXIVClientStructs.FFXIV.Client.UI.Agent.GrandCompany;
 using Quest = Questionable.Model.Quest;
+using static Questionable.Utils.CacheUtils;
 
 namespace Questionable.Functions;
 
@@ -39,7 +41,8 @@ internal sealed unsafe class QuestFunctions
     //IPlayerState playerState,
     IGameGuiAdapter gameGui,
     IChatGui chatGui,
-    IAetheryteList aetheryteList)
+    IAetheryteList aetheryteList,
+    ILogger<QuestFunctions> logger)
 {
     internal static readonly int[] questsThatUseWhiteWolfGate = [439, 1080, 3870, 33];
     private readonly AetheryteFunctions _aetheryteFunctions = aetheryteFunctions;
@@ -52,12 +55,39 @@ internal sealed unsafe class QuestFunctions
     private readonly IDataManager _dataManager = dataManager;
     //private readonly IPlayerState _playerState;
     private readonly IGameGuiAdapter _gameGui = gameGui;
+    private readonly ILogger<QuestFunctions> _logger = logger;
     private readonly IObjectTable _objectTable = objectTable;
     private readonly QuestData _questData = questData;
     private readonly QuestRegistry _questRegistry = questRegistry;
 
+    /// <summary>「主線已暫停」只在每次由關轉開時記一行（這支每幀會從框架與繪製執行緒被呼叫）。</summary>
+    private int _stopMsqLogged;
+
+    /// <summary>查詢目前任務，並在必要時把提示印給使用者看。</summary>
+    /// <remarks>
+    /// 🔴 <b>持有 <c>QuestController._progressLock</c> 時不要呼叫這一支</b>，
+    /// 用 <see cref="GetCurrentQuestWithHint"/> ——查詢函式本來就不該印東西，
+    /// 而聊天輸出在鎖裡做等於把鎖的持有時間綁在別的元件上。
+    /// </remarks>
     public QuestReference GetCurrentQuest(bool allowNewMsq = true)
     {
+        QuestReference result = GetCurrentQuestWithHint(allowNewMsq, out string? hint);
+        if (hint != null)
+        {
+            PrintHintThrottled(hint);
+        }
+
+        return result;
+    }
+
+    /// <summary>查詢目前任務。<b>純查詢，不印任何東西。</b></summary>
+    /// <param name="hint">
+    /// 不是 <see langword="null"/> 時代表「有一則要給使用者看的提示」，由呼叫端決定什麼時候印
+    /// （持鎖的呼叫端請收進延後清單）。實際輸出走 <see cref="PrintHintThrottled"/>，那裡有去重。
+    /// </param>
+    public QuestReference GetCurrentQuestWithHint(bool allowNewMsq, out string? hint)
+    {
+        hint = null;
         QuestReference internalQuest = GetCurrentQuestInternal(allowNewMsq);
         (ElementId? currentQuest, byte sequence, MainScenarioQuestState questState) = internalQuest;
         PlayerState* playerState = PlayerState.Instance();
@@ -116,15 +146,64 @@ internal sealed unsafe class QuestFunctions
             // quests that use white wolf gate, finish 'broadening horizons' to unlock it
             if (!_aetheryteFunctions.IsAetheryteUnlocked(EAetheryteLocation.GridaniaBlueBadgerGate))
             {
-                _chatGui.Print("This quest uses the White Wolf Gate, which requires that you unlock all aethernet shards in Gridania.\n" +
+                hint =
+                    "This quest uses the White Wolf Gate, which requires that you unlock all aethernet shards in Gridania.\n" +
                                "This should have happened as part of the quest \"Close To Home\" if starting in Gridania, or \"The Ul'dahn/Lominsan Envoy\" for the other cities.\n" +
-                               "Please unlock the aethernet shards, or complete the current quest sequence manually before continuing.");
+                               "Please unlock the aethernet shards, or complete the current quest sequence manually before continuing.";
             }
             QuestId broadeningHorizons = new(802);
             return new(broadeningHorizons, QuestManager.GetQuestSequence(broadeningHorizons.Value), questState);
         }
 
         return internalQuest;
+    }
+
+    /// <summary>同一則提示 <see cref="HintIntervalMs"/> 毫秒內最多印一次。</summary>
+    /// <remarks>
+    /// 🔴 提示的來源 <see cref="GetCurrentQuestWithHint"/> 從 <c>QuestController</c> 每一幀的輪詢與
+    /// 偵錯視窗的每一幀繪製都會被呼叫到 —— 不去重的話條件成立時等於<b>每幀印一行</b>。
+    /// <para>
+    /// 🔴 自帶字典＋自己的鎖，刻意<b>不用</b> ECommons 的 <c>EzThrottler</c>：那是整個外掛共用的
+    /// 靜態 <c>Dictionary</c> 且零同步，而這條路徑從 framework 執行緒與繪製執行緒都進得來。
+    /// 🔴 鎖內只碰字典 —— 不寫記錄、不做 I/O、不輸出聊天。
+    /// </para>
+    /// </remarks>
+    public void PrintHintThrottled(string hint)
+    {
+        if (!ShouldPrintHint(hint))
+        {
+            return;
+        }
+
+        _chatGui.Print(hint);
+    }
+
+    /// <summary>同一則提示的重印間隔。</summary>
+    private const long HintIntervalMs = 60000;
+
+    /// <summary>節流表上限，避免提示內容意外發散時無限成長。</summary>
+    private const int MaxTrackedHints = 32;
+
+    private readonly Dictionary<string, long> _hintTimes = [];
+
+    private bool ShouldPrintHint(string hint)
+    {
+        long now = Environment.TickCount64;
+        lock(_hintTimes)
+        {
+            if (_hintTimes.TryGetValue(hint, out long last) && now - last < HintIntervalMs)
+            {
+                return false;
+            }
+
+            if (_hintTimes.Count >= MaxTrackedHints && !_hintTimes.ContainsKey(hint))
+            {
+                _hintTimes.Clear();
+            }
+
+            _hintTimes[hint] = now;
+            return true;
+        }
     }
 
     public QuestReference GetCurrentQuestInternal(bool allowNewMsq)
@@ -259,7 +338,7 @@ internal sealed unsafe class QuestFunctions
             return new(firstTrackedQuest, firstTrackedSequence, msqQuest.State);
         }
 
-        ElementId? priorityQuest = GetNextPriorityQuestsThatCanBeAccepted()
+        ElementId? priorityQuest = NextPriorityQuestsThatCanBeAccepted
             .Where(x => x.IsAvailable)
             .Select(x => x.QuestId)
             .FirstOrDefault();
@@ -278,29 +357,58 @@ internal sealed unsafe class QuestFunctions
         return QuestReference.NoQuest(msqQuest.State);
     }
 
+    // 昔日重現模式（NG+）是否正在進行：章節已開始且沒有暫停。只在框架執行緒呼叫。
+    public bool IsNewGamePlusActive() => TryGetActiveNewGamePlusHud(out _);
+
+    // 回傳的 agent 指標只在這一次呼叫內有效，不可保存。
+    private bool TryGetActiveNewGamePlusHud(out AgentInterface* questRedoHud)
+    {
+        questRedoHud = null;
+        if (!QuestManager.IsQuestComplete(3759)) // Memories Rekindled
+            return false;
+
+        // AgentModule.Instance() 在 UI 尚未建立時回 null；取不到就當作沒有 NG+ HUD。
+        AgentModule* agentModule = AgentModule.Instance();
+        if (agentModule != null)
+            questRedoHud = agentModule->GetAgentByInternalId(AgentId.QuestRedoHud);
+
+        if (questRedoHud == null || !questRedoHud->IsAgentActive())
+            return false;
+
+        // there's surely better ways to check this, but the one in the OOB Plugin was even less reliable
+        // 🔴 AtkValuesCount 與 AtkValues 是兩個獨立欄位:長度對得上不代表指標已配置
+        //（拆解途中兩者的更新沒有原子性）。少判一個就是半套守衛。
+        return _gameGui.TryGetAddonByName<AtkUnitBase>("QuestRedoHud", out AtkUnitBase* addon) &&
+               addon != null && addon->AtkValues != null &&
+               addon->AtkValuesCount == 4 &&
+               // 0 seems to be active,
+               // 1 seems to be paused,
+               // 2 is unknown, but it happens e.g. before the quest 'Alzadaal's Legacy'
+               // 3 seems to be having /ng+ open while active,
+               // 4 seems to be when (a) suspending the chapter, or (b) having turned in a quest
+               addon->AtkValues[0].UInt is 0 or 2 or 3 or 4;
+    }
+
     public (QuestReference, string?) GetMainScenarioQuest()
     {
-        if (QuestManager.IsQuestComplete(3759)) // Memories Rekindled
+        if (_configuration.Advanced.StopMSQ)
         {
-            AgentInterface* questRedoHud = AgentModule.Instance()->GetAgentByInternalId(AgentId.QuestRedoHud);
-            if (questRedoHud != null && questRedoHud->IsAgentActive())
+            if (System.Threading.Interlocked.Exchange(ref _stopMsqLogged, 1) == 0)
             {
-                // there's surely better ways to check this, but the one in the OOB Plugin was even less reliable
-                if (_gameGui.TryGetAddonByName<AtkUnitBase>("QuestRedoHud", out AtkUnitBase* addon) &&
-                    addon->AtkValuesCount == 4 &&
-                    // 0 seems to be active,
-                    // 1 seems to be paused,
-                    // 2 is unknown, but it happens e.g. before the quest 'Alzadaal's Legacy'
-                    // 3 seems to be having /ng+ open while active,
-                    // 4 seems to be when (a) suspending the chapter, or (b) having turned in a quest
-                    addon->AtkValues[0].UInt is 0 or 2 or 3 or 4)
-                {
-                    // redoHud+44 is chapter
-                    // redoHud+46 is quest
-                    ushort questId = MemoryHelper.Read<ushort>((nint)questRedoHud + 46);
-                    return (new(new QuestId(questId), QuestManager.GetQuestSequence(questId), MainScenarioQuestState.Available), "NG+");
-                }
+                _logger.LogInformation("Main scenario quests are paused (Advanced.StopMSQ): the next MSQ is not taken from the scenario guide");
             }
+
+            return (QuestReference.NoQuest(MainScenarioQuestState.Unavailable), "Stop MSQ");
+        }
+
+        _stopMsqLogged = 0;
+
+        if (TryGetActiveNewGamePlusHud(out AgentInterface* questRedoHud))
+        {
+            // redoHud+44 is chapter
+            // redoHud+46 is quest
+            ushort questId = MemoryHelper.Read<ushort>((nint)questRedoHud + 46);
+            return (new(new QuestId(questId), QuestManager.GetQuestSequence(questId), MainScenarioQuestState.Available), "NG+");
         }
 
         AgentScenarioTree* scenarioTree = AgentScenarioTree.Instance();
@@ -314,7 +422,7 @@ internal sealed unsafe class QuestFunctions
             return (QuestReference.NoQuest(MainScenarioQuestState.LoadingScreen), "Scenario Tree Data is null");
         }
 
-        QuestId currentQuest = new(scenarioTree->Data->MainScenarioQuestIds[0]);
+        QuestId currentQuest = new(scenarioTree->Data->CurrentScenarioQuest);
         string extraData = $"sq: {currentQuest}";
         if (currentQuest.Value == 0)
         {
@@ -449,7 +557,9 @@ internal sealed unsafe class QuestFunctions
         }
     }
 
-    public List<PriorityQuestInfo> GetNextPriorityQuestsThatCanBeAccepted()
+    private CachedValue<List<PriorityQuestInfo>> _nextPriorityQuests = new(ttlSeconds: 2);
+    public List<PriorityQuestInfo> NextPriorityQuestsThatCanBeAccepted => _nextPriorityQuests.Get(GetNextPriorityQuestsThatCanBeAccepted);
+    private List<PriorityQuestInfo> GetNextPriorityQuestsThatCanBeAccepted()
     {
         // ideally, we'd also be able to afford *some* teleports
         // this implicitly makes sure we're not starting one of the lv1 class quests if we can't afford to teleport back
@@ -504,7 +614,7 @@ internal sealed unsafe class QuestFunctions
                             {
                                 // _logger.LogTrace("Checking priority quest {QuestId}: aetheryte locked, but is listed as skippable", quest.Id);
                             }
-                            else
+                            else if (!IsAetheryteShortcutSkippedAsUnlocked(y.Step))
                             {
                                 return aetheryteShortcut;
                             }
@@ -558,8 +668,18 @@ internal sealed unsafe class QuestFunctions
             });
 
         int baseCost = quest.Info.Expansion == EExpansionVersion.ARealmReborn ? 300 : 1000;
-        return quest.AllSteps().Where(x => x.Step.AetheryteShortcut != null)
+        return quest.AllSteps().Where(x => x.Step.AetheryteShortcut != null && !IsAetheryteShortcutSkippedAsUnlocked(x.Step))
             .Sum(x => (int)(baseCost * cheapTeleports.GetValueOrDefault(x.Step.AetheryteShortcut!.Value, 1f)));
+    }
+
+    /// <summary>
+    /// 與 UseAetheryteShortcut.ShouldSkipTeleport 同一條件：AetheryteShortcutIf.AetheryteUnlocked 已開啟時一定不傳送，
+    /// 這個傳送點就不算進「需要的乙太之光」與傳送費。
+    /// </summary>
+    private bool IsAetheryteShortcutSkippedAsUnlocked(QuestStep step)
+    {
+        return step.SkipConditions?.AetheryteShortcutIf is { Never: false, AetheryteUnlocked: { } unlocked } &&
+               _aetheryteFunctions.IsAetheryteUnlocked(unlocked);
     }
 
     public List<ElementId> GetPriorityQuests(bool onlyClassAndRoleQuests = false)
@@ -746,6 +866,31 @@ internal sealed unsafe class QuestFunctions
         return UIState.Instance()->IsUnlockLinkUnlocked(unlockLinkId.Value);
     }
 
+    /// <summary>
+    /// 「移除已完成的任務」專用的完成判定。每日聯盟(蠻族)任務可重複,完成後不會被寫進永久完成旗標,
+    /// <see cref="IsQuestComplete(ElementId)"/> 對它們永遠回 false —— 必須改查「本日是否已完成」。
+    /// 走 TryGetQuestInfo 以免未知任務 ID 讓 GetQuestInfo 擲出例外
+    /// (本方法在 ImGui 繪製回呼裡執行,擲例外會讓整個視窗畫不出來)。
+    /// 仍掛在日誌上(已接取未交付)的每日聯盟任務一律不算已完成,以免使用者還要交付的任務被掃掉。
+    /// </summary>
+    public bool IsQuestFinishedForPriorityRemoval(ElementId elementId)
+    {
+        if (elementId is QuestId questId &&
+            _questData.TryGetQuestInfo(questId, out IQuestInfo? questInfo) &&
+            questInfo is QuestInfo { IsRepeatable: true, AlliedSociety: not EAlliedSociety.None })
+        {
+            // 已接取但還沒交付的,不管本日完成旗標怎麼寫都不該被移除。
+            if (IsQuestAccepted(questId))
+            {
+                return false;
+            }
+
+            return QuestManager.Instance()->IsDailyQuestCompleted(questId.Value);
+        }
+
+        return IsQuestComplete(elementId);
+    }
+
     public bool IsQuestLocked(ElementId elementId, ElementId? extraCompletedQuest = null)
     {
         if (elementId is QuestId questId)
@@ -858,6 +1003,19 @@ internal sealed unsafe class QuestFunctions
         }
     }
 
+    // 唯讀常數表；IsQuestUnobtainable 從繪製路徑每幀被呼叫，不要每次 new。
+    private static readonly Dictionary<ushort, Job> CloseToHomeQuests = new()
+    {
+        { 108, Job.MRD },
+        { 109, Job.ACN },
+        { 85, Job.LNC },
+        { 123, Job.ARC },
+        { 124, Job.CNJ },
+        { 568, Job.GLA },
+        { 569, Job.PGL },
+        { 570, Job.THM }
+    };
+
     public bool IsQuestUnobtainable(QuestId questId, ElementId? extraCompletedQuest = null)
     {
         QuestInfo questInfo = (QuestInfo)_questData.GetQuestInfo(questId);
@@ -879,7 +1037,7 @@ internal sealed unsafe class QuestFunctions
             }
         }
 
-        if (_questData.GetLockedClassQuests().Contains(questId))
+        if (_questData.IsLockedClassQuest(questId))
         {
             return true;
         }
@@ -899,18 +1057,6 @@ internal sealed unsafe class QuestFunctions
             return true;
         }
 
-        Dictionary<ushort, Job> closeToHomeQuests = new()
-        {
-            { 108, Job.MRD },
-            { 109, Job.ACN },
-            { 85, Job.LNC },
-            { 123, Job.ARC },
-            { 124, Job.CNJ },
-            { 568, Job.GLA },
-            { 569, Job.PGL },
-            { 570, Job.THM }
-        };
-
         // The starting class experience is a bit confusing. If you start in Gridania, the MSQ next quest data will
         // always select 'Close to Home (Lancer)' even if starting as Conjurer/Archer. However, if we always mark the
         // Lancer quest as unobtainable, it'll not get picked up as Conjurer/Archer, and thus will stop questing.
@@ -918,8 +1064,8 @@ internal sealed unsafe class QuestFunctions
         // While the NPC offers all 3 quests, there's no manual selection, and interacting will automatically select the
         // quest for your current class, then switch you from a dead-ish intro zone to the actual starting city
         // (so that you can't come back later to pick up another quest).
-        if (closeToHomeQuests.TryGetValue(questId.Value, out Job neededStartingClass) &&
-            closeToHomeQuests.Any(x => IsQuestAcceptedOrComplete(new QuestId(x.Key))))
+        if (CloseToHomeQuests.TryGetValue(questId.Value, out Job neededStartingClass) &&
+            CloseToHomeQuests.Any(x => IsQuestAcceptedOrComplete(new QuestId(x.Key))))
         {
             Job actualStartingClass = (Job)PlayerState.Instance()->FirstClass;
             if (actualStartingClass != neededStartingClass)
@@ -1060,13 +1206,16 @@ internal sealed unsafe class QuestFunctions
         }
 
         PlayerState* playerState = PlayerState.Instance();
-        return playerState != null && playerState->ClassJobLevels[classJobRow.ExpArrayIndex] > 0;
-    }
+        if (playerState == null)
+            return false;
 
-    public bool IsJobUnlocked(Job classJob)
-    {
-        ClassJob classJobRow = _dataManager.GetExcelSheet<ClassJob>().GetRow((uint)classJob);
-        return IsClassJobUnlocked((Job)classJobRow.ClassJobParent.RowId);
+        // 🔴 ClassJob 第 0 列（冒險者/ADV）的 ExpArrayIndex 是 -1，直接拿去索引 FixedSizeArray35
+        //    會擲 IndexOutOfRangeException。越界時回 false（未知），不是退回索引 0 ——
+        //    第 0 格是格鬥士/武僧的等級，那會是安靜的錯答案。
+        var classJobLevels = playerState->ClassJobLevels;
+        return ExpArrayIndexUtils.IsInRange(classJobRow.ExpArrayIndex, classJobLevels.Length, (uint)classJob,
+                   _logger)
+               && classJobLevels[classJobRow.ExpArrayIndex] > 0;
     }
 
     public GrandCompany GetGrandCompany()

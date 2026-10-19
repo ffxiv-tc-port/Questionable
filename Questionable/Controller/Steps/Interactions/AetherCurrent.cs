@@ -52,17 +52,17 @@ internal static class AetherCurrent
     internal sealed class DoAttune
     (
         GameFunctions gameFunctions,
+        ICondition condition,
         ILogger<DoAttune> logger) : TaskExecutor<Attune>
     {
+        private readonly InteractionRetry _retry = new();
+
         protected override bool Start()
         {
             if (!gameFunctions.IsAetherCurrentUnlocked(Task.AetherCurrentId))
             {
                 logger.LogInformation("Attuning to aether current {AetherCurrentId} / {DataId}", Task.AetherCurrentId,
                     Task.DataId);
-                ProgressContext =
-                    InteractionProgressContext.FromActionUseOrDefault(() =>
-                        gameFunctions.InteractWith(Task.DataId, ObjectKind.EventObj));
                 return true;
             }
 
@@ -74,9 +74,19 @@ internal static class AetherCurrent
 
         public override ETaskResult Update()
         {
-            return gameFunctions.IsAetherCurrentUnlocked(Task.AetherCurrentId)
-                ? ETaskResult.TaskComplete
-                : ETaskResult.StillRunning;
+            if (gameFunctions.IsAetherCurrentUnlocked(Task.AetherCurrentId))
+            {
+                return ETaskResult.TaskComplete;
+            }
+
+            if (_retry.ShouldSend(condition, logger, Task))
+            {
+                ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
+                    gameFunctions.InteractWith(Task.DataId, ObjectKind.EventObj));
+                _retry.OnSent();
+            }
+
+            return ETaskResult.StillRunning;
         }
 
         public override bool ShouldInterruptOnDamage()

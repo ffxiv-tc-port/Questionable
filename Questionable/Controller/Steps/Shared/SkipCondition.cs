@@ -23,6 +23,13 @@ internal static class SkipCondition
         public override ITask? CreateTask(Quest quest, QuestSequence sequence, QuestStep step)
         {
             SkipStepConditions? skipConditions = step.SkipConditions?.StepIf;
+
+            // 寫在 Never 之前：關掉「解鎖運輸站」時，標成永不略過的解鎖步驟也要略過。
+            if (IsDisabledTaxiStandUnlock(configuration, step))
+            {
+                return new SkipTask(step, skipConditions ?? new(), quest.Id);
+            }
+
             if (skipConditions is { Never: true })
             {
                 return null;
@@ -44,6 +51,9 @@ internal static class SkipCondition
             return new SkipTask(step, skipConditions ?? new(), quest.Id);
         }
     }
+
+    internal static bool IsDisabledTaxiStandUnlock(Configuration configuration, QuestStep step) =>
+        step.InteractionType == EInteractionType.UnlockTaxiStand && !configuration.Advanced.UnlockChocoboTaxiStands;
 
     internal sealed record SkipTask
     (
@@ -76,6 +86,14 @@ internal static class SkipCondition
             SkipStepConditions skipConditions = Task.SkipConditions;
             QuestStep step = Task.Step;
             ElementId elementId = Task.ElementId;
+
+            if (IsDisabledTaxiStandUnlock(configuration, step))
+            {
+                logger.LogInformation(
+                    "Skipping step, as unlocking chocobo porter stops is disabled (taxi stand {TaxiStandId})",
+                    step.TaxiStandId);
+                return true;
+            }
 
             logger.LogInformation("Checking skip conditions; {ConfiguredConditions}", string.Join(",", skipConditions));
 

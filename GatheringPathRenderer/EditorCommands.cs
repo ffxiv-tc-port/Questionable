@@ -74,7 +74,17 @@ internal sealed class EditorCommands : IDisposable
 
     private unsafe void AddAllMissing()
     {
-        var layout = LayoutWorld.Instance()->ActiveLayout;
+        // 🔴 LayoutWorld 宣告為 [StaticAddress(..., isPointer: true)],Instance() 回傳的是靜態槽
+        //    「裡面的值」,可以合法為 null(區域切換、讀取畫面期間)。直接 -> 解參考會產生
+        //    AccessViolationException——那在 .NET Core 是 corrupted-state exception,
+        //    外層的 try/catch 攔不到,會直接把遊戲帶走。取不到就當作查無資料(fail-closed)。
+        var layoutWorld = LayoutWorld.Instance();
+        if (layoutWorld == null)
+        {
+            return;
+        }
+
+        var layout = layoutWorld->ActiveLayout;
         if (layout == null || !layout->InstancesByType.TryGetValue(InstanceType.Gathering, out var mapPtr, false))
         {
             return;

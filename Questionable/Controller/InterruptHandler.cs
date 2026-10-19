@@ -15,7 +15,8 @@ internal sealed unsafe class InterruptHandler : IDisposable
     private readonly IClientState _clientState;
     private readonly ILogger<InterruptHandler> _logger;
     private readonly IObjectTable _objectTable;
-    private readonly Hook<ProcessActionEffect> _processActionEffectHook;
+    /// <summary><see langword="null"/>＝遊戲改版後位址解不出：<see cref="Interrupted"/> 永遠不觸發，其餘功能照常。</summary>
+    private readonly Hook<ProcessActionEffect>? _processActionEffectHook;
     private readonly TerritoryData _territoryData;
 
     public InterruptHandler(IGameInteropProvider gameInteropProvider, IClientState clientState,
@@ -25,16 +26,36 @@ internal sealed unsafe class InterruptHandler : IDisposable
         _objectTable = objectTable;
         _territoryData = territoryData;
         _logger = logger;
-        _processActionEffectHook =
-            gameInteropProvider.HookFromAddress<ProcessActionEffect>(ActionEffectHandler.Addresses.Receive.Value,
-                HandleProcessActionEffect);
-        _processActionEffectHook.Enable();
+
+        // QuestController／GatheringController 都注入這個單例：建構子擲例外＝整個插件載入失敗。
+        nint receiveAddress = ActionEffectHandler.Addresses.Receive.Value;
+        if (receiveAddress == 0)
+        {
+            _logger.LogWarning(
+                "ActionEffectHandler.Receive could not be resolved (game update?); interrupting tasks when taking damage is disabled");
+            return;
+        }
+
+        try
+        {
+            _processActionEffectHook =
+                gameInteropProvider.HookFromAddress<ProcessActionEffect>(receiveAddress, HandleProcessActionEffect);
+            _processActionEffectHook.Enable();
+        }
+        catch(Exception e)
+        {
+            _processActionEffectHook?.Dispose();
+            _processActionEffectHook = null;
+            _logger.LogWarning(e,
+                "Unable to hook ActionEffectHandler.Receive at {Address:X}; interrupting tasks when taking damage is disabled",
+                receiveAddress);
+        }
     }
 
     public void Dispose()
     {
-        _processActionEffectHook.Disable();
-        _processActionEffectHook.Dispose();
+        _processActionEffectHook?.Disable();
+        _processActionEffectHook?.Dispose();
     }
 
     public event EventHandler? Interrupted;
@@ -42,9 +63,15 @@ internal sealed unsafe class InterruptHandler : IDisposable
     private void HandleProcessActionEffect(uint sourceId, Character* sourceCharacter, Vector3* pos,
         EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail)
     {
+        // fail-closed：自訂邏輯全在 try 內、Original 在 finally 裡 —— 不管我們怎麼失敗，
+        // 遊戲原本的處理一定照跑一次。這個形狀本身已經是對的，不要改成「try 後面接一行 Original」。
+        // 🔴 但 try 攔不到 AccessViolationException（在 .NET Core 是 corrupted-state exception），
+        //    而 effectHeader / effectArray / effectTail 三個都是遊戲交進來的裸指標。
+        //    下面的判空才是對那條路徑的唯一防護；判空不成立時就整段跳過，讓 finally 的 Original 照跑。
         try
         {
-            if (!_territoryData.IsDutyInstance(_clientState.TerritoryType))
+            if (effectHeader != null && effectArray != null && effectTail != null &&
+                !_territoryData.IsDutyInstance(_clientState.TerritoryType))
             {
                 for(int i = 0; i < effectHeader->TargetCount; i++)
                 {
@@ -69,7 +96,8 @@ internal sealed unsafe class InterruptHandler : IDisposable
         }
         finally
         {
-            _processActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTail);
+            // 這個 detour 只會經由已建立的 hook 被呼叫，hook 不會是 null。
+            _processActionEffectHook!.OriginalDisposeSafe(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTail);
         }
     }
 

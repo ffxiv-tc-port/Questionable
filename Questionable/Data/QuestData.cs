@@ -83,6 +83,7 @@ internal sealed class QuestData
         [new(3248), new(3272), new(3278), new(3628)];
 
     private readonly Dictionary<ElementId, IQuestInfo> _quests;
+    private readonly HashSet<byte> _knownAlliedSocieties;
     private readonly IPluginLog? _pluginLog;
 
     public QuestData(IDataManager dataManager, ClassJobUtils classJobUtils, IPluginLog? pluginLog = null)
@@ -148,7 +149,12 @@ internal sealed class QuestData
         quests.Add(new UnlockLinkQuestInfo(new(568), "Patch 7.3 Fantasia", 1052475));
 
         _quests = quests.ToDictionary(x => x.QuestId, x => x);
+        _knownAlliedSocieties = quests.Select(x => x.QuestId).OfType<AlliedSocietyDailyId>()
+            .Select(x => x.AlliedSociety).ToHashSet();
 
+        AddPreviousQuest(new(2898), new(2922));
+        AddPreviousQuest(new(5008), new(4933));
+        AddPreviousQuest(new(5012), new(4959));
         // workaround because the game doesn't require completion of the CT questline through normal means
         AddPreviousQuest(new(425), new(495));
 
@@ -288,8 +294,16 @@ internal sealed class QuestData
             .Cast<QuestInfo>()
             .ToList();
 
+        // 先收齊所有主線任務的前置任務再逐一查，不做主線×主線兩兩比對（每對都要裝箱一個列舉器）。
+        HashSet<ElementId> mainScenarioPreviousQuests = [];
+        foreach(QuestInfo mainScenarioQuest in MainScenarioQuests)
+        {
+            foreach(PreviousQuestInfo previousQuest in mainScenarioQuest.PreviousQuests)
+                mainScenarioPreviousQuests.Add(previousQuest.QuestId);
+        }
+
         LastMainScenarioQuestId = MainScenarioQuests
-            .Where(x => !MainScenarioQuests.Any(y => y.PreviousQuests.Any(z => z.QuestId == x.QuestId)))
+            .Where(x => !mainScenarioPreviousQuests.Contains(x.QuestId))
             .Select(x => (QuestId)x.QuestId)
             .FirstOrDefault() ?? new QuestId(0);
         RedeemableItems = quests.Where(x => x is QuestInfo)
@@ -332,6 +346,19 @@ internal sealed class QuestData
     {
         return _quests.TryGetValue(elementId, out questInfo);
     }
+
+    /// <summary>
+    /// 這個 id 的種類以本客戶端的表為準（任務、老主顧交易），而表裡沒有它：落後國際服的地區尚未開放的內容。
+    /// 對它走 <see cref="GetQuestInfo"/>（含 QuestFunctions 的鎖定判定）會擲例外，呼叫端要先用這支擋在入口。
+    /// </summary>
+    /// <remarks>聯盟部族日常與解鎖連結不在表內也有既定判定，不算在內。</remarks>
+    public bool IsMissingFromSheet(ElementId elementId)
+    {
+        return (elementId is QuestId or SatisfactionSupplyNpcId) && !_quests.ContainsKey(elementId);
+    }
+
+    /// <summary>本客戶端 BeastTribe 表裡的友好部族編號，篩選與建友好部族日常項目時相同（RowId &gt; 0 且名稱非空）。</summary>
+    public bool IsKnownAlliedSociety(byte alliedSociety) => _knownAlliedSocieties.Contains(alliedSociety);
 
     public List<IQuestInfo> GetAllByIssuerDataId(uint targetId)
     {
@@ -464,45 +491,60 @@ internal sealed class QuestData
             .ToList();
     }
 
+    // Starting as another class gives "So you want to be a XX", "Way of the XX" (depends on it) and "My First XX";
+    // starting with this class gives "Way of the XX" (no preconditions). The level 10 quests differ as well.
+    private static readonly (Job Class, ushort[] LockedIfStartingClass, ushort[] LockedOtherwise)[] StartingClassQuests =
+    [
+        (Job.GLA, [177, 285, 286, 288], [253, 261]),
+        (Job.PGL, [178, 532, 553, 698], [533, 555]),
+        (Job.MRD, [179, 310, 312, 315], [311, 314]),
+        (Job.LNC, [180, 132, 218, 143], [23, 35]),
+        (Job.ARC, [181, 131, 219, 134], [21, 67]),
+        (Job.CNJ, [182, 133, 211, 147], [22, 91]),
+        (Job.THM, [183, 344, 346, 349], [345, 348]),
+        (Job.ACN, [451, 452, 454, 457], [453, 456])
+    ];
+
+    private static unsafe Job GetStartingClass()
+    {
+        PlayerState* playerState = PlayerState.Instance();
+        return playerState != null ? (Job)playerState->FirstClass : Job.ADV;
+    }
+
     public List<QuestId> GetLockedClassQuests()
     {
-        Job startingClass;
-        unsafe
-        {
-            PlayerState* playerState = PlayerState.Instance();
-            if (playerState != null)
-            {
-                startingClass = (Job)playerState->FirstClass;
-            }
-            else
-            {
-                startingClass = Job.ADV;
-            }
-        }
-
+        Job startingClass = GetStartingClass();
         if (startingClass == Job.ADV)
         {
             return [];
         }
 
-        // If you start the game as another class, you get:
-        // - "So you want to be a XX"
-        // - "Way of the XX" (depends on "So you want to be a XX")
-        // - "My First XX"
-        // If you start the game with this class, you get:
-        // - "Way of the XX" (no preconditions)
-        // In both cases, the level 10 quests are different
-        List<List<ushort>> startingClassQuests =
-        [
-            startingClass == Job.GLA ? [177, 285, 286, 288] : [253, 261],
-            startingClass == Job.PGL ? [178, 532, 553, 698] : [533, 555],
-            startingClass == Job.MRD ? [179, 310, 312, 315] : [311, 314],
-            startingClass == Job.LNC ? [180, 132, 218, 143] : [23, 35],
-            startingClass == Job.ARC ? [181, 131, 219, 134] : [21, 67],
-            startingClass == Job.CNJ ? [182, 133, 211, 147] : [22, 91],
-            startingClass == Job.THM ? [183, 344, 346, 349] : [345, 348],
-            startingClass == Job.ACN ? [451, 452, 454, 457] : [453, 456]
-        ];
-        return startingClassQuests.SelectMany(x => x).Select(x => new QuestId(x)).ToList();
+        return StartingClassQuests
+            .SelectMany(x => x.Class == startingClass ? x.LockedIfStartingClass : x.LockedOtherwise)
+            .Select(x => new QuestId(x))
+            .ToList();
+    }
+
+    /// <summary>
+    ///     與 <c>GetLockedClassQuests().Contains(questId)</c> 同結果但不配置：登入時重算任務日誌會對每個任務呼叫一次，
+    ///     決定下一個任務時也會每幀呼叫。輸入只有起始職業（每次現讀，不快取）。
+    /// </summary>
+    public bool IsLockedClassQuest(QuestId questId)
+    {
+        Job startingClass = GetStartingClass();
+        if (startingClass == Job.ADV)
+        {
+            return false;
+        }
+
+        foreach ((Job job, ushort[] lockedIfStartingClass, ushort[] lockedOtherwise) in StartingClassQuests)
+        {
+            if (Array.IndexOf(job == startingClass ? lockedIfStartingClass : lockedOtherwise, questId.Value) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

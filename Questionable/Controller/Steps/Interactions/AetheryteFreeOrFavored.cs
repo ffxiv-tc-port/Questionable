@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Plugin.Services;
 using Microsoft.Extensions.Logging;
 using Questionable.Functions;
 using Questionable.Model;
@@ -40,8 +41,11 @@ internal static class AetheryteFreeOrFavored
     (
         AetheryteFunctions aetheryteFunctions,
         GameFunctions gameFunctions,
+        ICondition condition,
         ILogger<DoRegister> logger) : TaskExecutor<Register>
     {
+        private readonly InteractionRetry _retry = new();
+
         protected override bool Start()
         {
             if (!aetheryteFunctions.IsAetheryteUnlocked(Task.AetheryteLocation))
@@ -57,17 +61,25 @@ internal static class AetheryteFreeOrFavored
                 return false;
             }
 
-            ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
-                gameFunctions.InteractWith((uint)Task.AetheryteLocation, ObjectKind.Aetheryte));
             return true;
         }
 
         public override ETaskResult Update()
         {
-            return aetheryteFunctions.CanRegisterFreeOrFavoriteAetheryte(Task.AetheryteLocation) ==
-                   AetheryteRegistrationResult.NotPossible
-                ? ETaskResult.TaskComplete
-                : ETaskResult.StillRunning;
+            if (aetheryteFunctions.CanRegisterFreeOrFavoriteAetheryte(Task.AetheryteLocation) ==
+                AetheryteRegistrationResult.NotPossible)
+            {
+                return ETaskResult.TaskComplete;
+            }
+
+            if (_retry.ShouldSend(condition, logger, Task))
+            {
+                ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
+                    gameFunctions.InteractWith((uint)Task.AetheryteLocation, ObjectKind.Aetheryte));
+                _retry.OnSent();
+            }
+
+            return ETaskResult.StillRunning;
         }
 
         public override bool ShouldInterruptOnDamage()
