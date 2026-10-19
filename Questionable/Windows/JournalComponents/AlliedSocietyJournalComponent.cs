@@ -6,6 +6,8 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using Dalamud.Plugin.Services;
+using BeastTribe = Lumina.Excel.Sheets.BeastTribe;
 using Questionable.Controller;
 using Questionable.Data;
 using Questionable.Functions;
@@ -28,11 +30,12 @@ internal sealed class AlliedSocietyJournalComponent
     QuestTooltipComponent questTooltipComponent,
     UiUtils uiUtils,
     Configuration configuration,
-    IDalamudPluginInterface pluginInterface)
+    IDalamudPluginInterface pluginInterface,
+    IDataManager dataManager)
 {
     private static readonly EAlliedSociety[] AlliedSocieties =
         Enum.GetValues<EAlliedSociety>().Where(x => x != EAlliedSociety.None).ToArray();
-    private readonly SocietyRow[] _rows = AlliedSocieties.Select(x => new SocietyRow(x)).ToArray();
+    private readonly SocietyRow[] _rows = AlliedSocieties.Select(x => new SocietyRow(x, GetTribeNames(dataManager, x))).ToArray();
     private static readonly string[] RankNames =
         ["Neutral", "Recognized", "Friendly", "Trusted", "Respected", "Honored", "Sworn", "Allied"];
     private readonly AlliedSocietyQuestFunctions _alliedSocietyQuestFunctions = alliedSocietyQuestFunctions;
@@ -136,6 +139,11 @@ internal sealed class AlliedSocietyJournalComponent
                 }
             }
 
+            if (row.FullName != row.ShortName && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            {
+                ImGui.SetTooltip(row.FullName);
+            }
+
             _questJournalUtils.ShowQuestGroupContextMenu(row.MenuNote, quests);
 
             if (!isOpen)
@@ -169,6 +177,30 @@ internal sealed class AlliedSocietyJournalComponent
                 }
             }
         }
+    }
+
+    // 列舉值 1..19 與 BeastTribe 列號一致；表中沒有該列或名稱為空時退回列舉名。
+    private static (string Short, string Full) GetTribeNames(IDataManager dataManager, EAlliedSociety society)
+    {
+        string fallback = society.ToString();
+        try
+        {
+            if (dataManager.GetExcelSheet<BeastTribe>().TryGetRow((uint)society, out BeastTribe row))
+            {
+                string full = row.Name.ExtractText();
+                if (!string.IsNullOrWhiteSpace(full))
+                {
+                    int sep = full.IndexOf('：');
+                    string shortName = sep > 0 ? full[..sep] : full;
+                    return (shortName, full);
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return (fallback, fallback);
     }
 
     private void DrawAutoQueueCheckbox(SocietyRow row)
@@ -210,10 +242,12 @@ internal sealed class AlliedSocietyJournalComponent
     }
 
     /// <summary>一個部族的標題字串與「可接任務」快取；<see cref="Quests"/> 只在 <see cref="AvailabilityKey"/> 變了才重算。</summary>
-    private sealed class SocietyRow(EAlliedSociety society)
+    private sealed class SocietyRow(EAlliedSociety society, (string Short, string Full) names)
     {
         public EAlliedSociety Society { get; } = society;
-        public string Label { get; } = $"{society}###AlliedSociety{(int)society}";
+        public string ShortName { get; } = names.Short;
+        public string FullName { get; } = names.Full;
+        public string Label { get; } = $"{names.Short}###AlliedSociety{(int)society}";
         public string MenuNote { get; } = $"DrawAlliedSocietyQuests{society}";
         public string AutoQueueId { get; } = $"##AutoQueueAlliedSociety{(int)society}";
         public int AvailabilityKey { get; set; } = -1;

@@ -1,4 +1,5 @@
 ﻿using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Questionable.Controller;
@@ -23,7 +24,7 @@ internal sealed class JournalProgressWindow : LWindow, IDisposable
         GatheringJournalComponent gatheringJournalComponent,
         QuestRegistry questRegistry,
         IClientState clientState)
-        : base("Journal Progress###QuestionableJournalProgress")
+        : base("Journal Progress".Loc() + "###QuestionableJournalProgress")
     {
         _questJournalComponent = questJournalComponent;
         _alliedSocietyJournalComponent = alliedSocietyJournalComponent;
