@@ -143,6 +143,7 @@
           "StopDistance": 7,
           "TerritoryId": 612,
           "InteractionType": "CompleteQuest",
+          "AetheryteShortcut": "Fringes - Peering Stones",
           "Fly": true
         }
       ]

@@ -107,6 +107,7 @@
           },
           "TerritoryId": 401,
           "InteractionType": "CompleteQuest",
+          "AetheryteShortcut": "The Sea of Clouds - Ok' Zundu",
           "Fly": true
         }
       ]

@@ -111,6 +111,7 @@
           "StopDistance": 7,
           "TerritoryId": 817,
           "InteractionType": "CompleteQuest",
+          "AetheryteShortcut": "Rak'tika - Fanow",
           "Fly": true
         }
       ]

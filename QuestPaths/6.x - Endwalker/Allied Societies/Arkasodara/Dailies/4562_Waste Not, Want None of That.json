@@ -62,6 +62,7 @@
           },
           "TerritoryId": 957,
           "InteractionType": "CompleteQuest",
+          "AetheryteShortcut": "Thavnair - Yedlihmad",
           "Fly": true
         }
       ]
