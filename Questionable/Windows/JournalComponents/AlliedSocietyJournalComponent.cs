@@ -73,6 +73,17 @@ internal sealed class AlliedSocietyJournalComponent
         ImGuiComponents.HelpMarker(
             "Tick the box in front of an allied society: pressing Start will then accept that society's daily quests for today and complete them in order (within the remaining allowance).".Loc());
 
+        bool optimizeRoute = _configuration.General.OptimizeAlliedSocietyDailyRoute;
+        if (ImGui.Checkbox("Optimize route for multiple daily quests".Loc(), ref optimizeRoute))
+        {
+            _configuration.General.OptimizeAlliedSocietyDailyRoute = optimizeRoute;
+            _pluginInterface.SavePluginConfig(_configuration);
+        }
+
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(
+            "After accepting, go to the nearest objective first instead of following quest order; when only the turn-in is left and other quests for the same quest giver still have objectives, do those first and turn everything in together at the end. Untick to use the fixed quest order.".Loc());
+
         foreach(SocietyRow row in _rows)
         {
             EAlliedSociety alliedSociety = row.Society;

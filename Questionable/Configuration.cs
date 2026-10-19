@@ -69,6 +69,12 @@ internal sealed class Configuration : IPluginConfiguration
         /// 空集合（預設）＝關，與舊版行為相同。
         /// </summary>
         public HashSet<EAlliedSociety> AutoQueueAlliedSocietyDailies { get; set; } = [];
+
+        /// <summary>
+        /// 自動排入的部族日常不照任務編號順序做：先做離目前位置最近的目標，同一位委託人的交任務留到最後一起交。
+        /// 新欄位，既有設定檔沒有這個鍵 ⇒ 既有使用者也是開的；關掉＝回到固定順序。
+        /// </summary>
+        public bool OptimizeAlliedSocietyDailyRoute { get; set; } = true;
     }
 
     internal sealed class StopConfiguration

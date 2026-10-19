@@ -98,6 +98,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     private readonly TataruPraiseIpc _tataruPraiseIpc;
     private readonly BossModIpc _bossModIpc;
     private readonly LifestreamIpc _lifestreamIpc;
+    private readonly AlliedDailyRouteEstimator _alliedDailyRouteEstimator;
     private readonly IToastGui _toastGui;
     private EAutomationType _automationType;
     private DateTime _lastAutoRefresh = DateTime.MinValue;
@@ -171,7 +172,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         AlliedSocietyQuestFunctions alliedSocietyQuestFunctions,
         TataruPraiseIpc tataruPraiseIpc,
         BossModIpc bossModIpc,
-        LifestreamIpc lifestreamIpc)
+        LifestreamIpc lifestreamIpc,
+        AlliedDailyRouteEstimator alliedDailyRouteEstimator)
         : base(chatGui, condition, serviceProvider, interruptHandler, dataManager, logger)
     {
         _clientState = clientState;
@@ -196,6 +198,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         _tataruPraiseIpc = tataruPraiseIpc;
         _bossModIpc = bossModIpc;
         _lifestreamIpc = lifestreamIpc;
+        _alliedDailyRouteEstimator = alliedDailyRouteEstimator;
         _logger = logger;
         _highlightObject = highlightObject;
 
@@ -280,6 +283,26 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
     /// <summary>上一幀批次選任務的結果種類（<c>AlliedDailyPick*</c>，0＝沒選）。</summary>
     private int _alliedDailyLastPickKind;
+
+    /// <summary>路線優化每次重算時重用的暫存（與 <see cref="_alliedDailyBatch"/> 同順序）。</summary>
+    private readonly List<AlliedDailyRoute.Item> _alliedDailyRouteItems = [];
+    private readonly List<AlliedDailyRouteEstimator.Note> _alliedDailyRouteNotes = [];
+    private readonly List<int> _alliedDailyRoutePlan = [];
+
+    /// <summary>已經確認「只剩交任務」的任務與當時的序列；序列變了就不算。登出時清空。</summary>
+    private readonly Dictionary<ElementId, byte> _alliedDailyTurnInReady = [];
+
+    /// <summary>
+    /// 延後交任務而換走的任務當時做到哪一步；換回來時從這一步接著做，不從序列第一步重來
+    /// （同一序列裡交任務前若有不會自動略過的步驟，例如移動，重來會白跑一趟）。序列變了就不算。
+    /// </summary>
+    private readonly Dictionary<ElementId, (byte Sequence, int Step)> _alliedDailyResumeStep = [];
+
+    /// <summary>路線決定的輸入（狀態、序列、目前任務的步驟）沒變就沿用上次的結果；<see langword="null"/>＝要重算。</summary>
+    private int? _alliedDailyRouteKey;
+    private int _alliedDailyRouteIndex = -1;
+    private int _alliedDailyRouteKind;
+    private (uint TerritoryId, Vector3 Position)? _alliedDailyLastPlayer;
 
     /// <summary>遊戲的上限：每個友好部族一天最多接 3 個日常。</summary>
     private const int MaxDailyQuestsPerAlliedSociety = 3;
@@ -800,6 +823,10 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             {
                 ResetInternalState();
                 _alliedDailyBatch.Clear();
+                _alliedDailyTurnInReady.Clear();
+                _alliedDailyResumeStep.Clear();
+                _alliedDailyRouteKey = null;
+                _alliedDailyLastPlayer = null;
                 DebugState = "Not logged in";
                 return;
             }
@@ -982,7 +1009,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                             "[任務切換] {PreviousQuestId} → {QuestId} {QuestName}（序列 {Sequence}，來源：{QuestSource}）",
                             [StartedQuest?.Quest.Id.ToString() ?? "-", quest.Id, quest.Info.Name, currentSequence, questSource],
                             null));
-                        StartedQuest = new(quest, currentSequence);
+                        StartedQuest = new(quest, currentSequence, TakeAlliedDailyResumeStep(quest.Id, currentSequence));
 #if DEBUG
                         if (_configuration.Advanced.OpenEditor)
                         {
@@ -1824,6 +1851,22 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             _alliedDailyBatchIdleLogged = false;
             _alliedDailyBatchStateKey = null;
             _alliedDailyLastPickKind = 0;
+            _alliedDailyRouteKey = null;
+            foreach (ElementId id in _alliedDailyTurnInReady.Keys.ToList())
+            {
+                if (!_questFunctions.IsQuestAccepted(id))
+                {
+                    _alliedDailyTurnInReady.Remove(id);
+                }
+            }
+
+            foreach (ElementId id in _alliedDailyResumeStep.Keys.ToList())
+            {
+                if (!_questFunctions.IsQuestAccepted(id))
+                {
+                    _alliedDailyResumeStep.Remove(id);
+                }
+            }
         }
 
         string reasons = notQueued.Count > 0 ? string.Join("；", notQueued) : "勾選的部族今天都沒有任務";
@@ -1895,8 +1938,13 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         }
 
         LogAlliedDailyBatchStateIfChanged(pending);
-        int index = PickAlliedDailyBatchIndex(_alliedDailyBatchStates, startedIndex, _alliedDailyLastPickKind,
-            out int kind);
+        if (!_configuration.General.OptimizeAlliedSocietyDailyRoute ||
+            !TryPickAlliedDailyRoute(startedIndex, pending, out int index, out int kind))
+        {
+            index = PickAlliedDailyBatchIndex(_alliedDailyBatchStates, startedIndex, _alliedDailyLastPickKind,
+                out kind);
+        }
+
         _alliedDailyLastPickKind = index < 0 ? 0 : kind;
         if (index < 0)
         {
@@ -1917,6 +1965,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         {
             AlliedDailyPickAccept => "部族日常：接任務",
             AlliedDailyPickContinue => "部族日常：繼續",
+            AlliedDailyPickRoute => "部族日常：路線",
             _ => "部族日常：下一個"
         };
         sequence = kind == AlliedDailyPickAccept ? (byte)0 : _questFunctions.GetQuestProgressInfo(questId)?.Sequence ?? 0;
@@ -1961,6 +2010,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     internal const int AlliedDailyPickAccept = 1;
     internal const int AlliedDailyPickContinue = 2;
     internal const int AlliedDailyPickNext = 3;
+    internal const int AlliedDailyPickRoute = 4;
 
     /// <summary><see cref="TryPickAlliedDailyBatchQuest"/> 的純邏輯部分（不碰遊戲狀態，離線可測）。</summary>
     /// <param name="items">批次順序的（部族、狀態）；同一部族必須相鄰。</param>
@@ -2035,6 +2085,139 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         }
 
         return -1;
+    }
+
+    /// <summary>
+    /// 路線優化版的選任務（<see cref="AlliedDailyRoute.Pick"/>）。輸入沒變就沿用上次結果：
+    /// 位置與背包只在「批次狀態、序列或目前任務的步驟變了」那一刻讀一次，同一個決定不會一幀一幀改來改去。
+    /// </summary>
+    /// <returns><see langword="false"/>＝從來沒拿到過玩家位置，改用固定順序。</returns>
+    private bool TryPickAlliedDailyRoute(int startedIndex, List<PendingLog> pending, out int index, out int kind)
+    {
+        index = -1;
+        kind = 0;
+        HashCode hash = new();
+        hash.Add(startedIndex);
+        hash.Add(_alliedDailyLastPickKind);
+        hash.Add(StartedQuest?.Sequence ?? 0);
+        hash.Add(StartedQuest?.Step ?? -1);
+        for (int i = 0; i < _alliedDailyBatch.Count; ++i)
+        {
+            int state = _alliedDailyBatchStates[i].State;
+            hash.Add(state);
+            if (state == AlliedDailyAccepted &&
+                AlliedDailyRouteEstimator.TryReadQuestWork(_alliedDailyBatch[i].QuestId, out byte sequence, out _))
+            {
+                hash.Add(sequence);
+            }
+        }
+
+        int key = hash.ToHashCode();
+        if (key == _alliedDailyRouteKey)
+        {
+            index = _alliedDailyRouteIndex;
+            kind = _alliedDailyRouteKind;
+            return true;
+        }
+
+        // 讀圖中拿不到玩家：用最後一次看到的位置排，不退回固定順序（否則會跟剛排好的路線打架）。
+        uint territoryId;
+        Vector3 position;
+        if (_objectTable[0] is { } player)
+        {
+            territoryId = _clientState.TerritoryType;
+            position = player.Position;
+            _alliedDailyLastPlayer = (territoryId, position);
+        }
+        else if (_alliedDailyLastPlayer is { } last)
+        {
+            (territoryId, position) = last;
+        }
+        else
+        {
+            return false;
+        }
+
+        _alliedDailyRouteItems.Clear();
+        _alliedDailyRouteNotes.Clear();
+        for (int i = 0; i < _alliedDailyBatch.Count; ++i)
+        {
+            (ElementId id, EAlliedSociety society) = _alliedDailyBatch[i];
+            if (_alliedDailyBatchStates[i].State != AlliedDailyAccepted)
+            {
+                _alliedDailyResumeStep.Remove(id);
+            }
+
+            int startedStep = i == startedIndex && StartedQuest != null &&
+                              AlliedDailyRouteEstimator.TryReadQuestWork(id, out byte sequence, out _) &&
+                              StartedQuest.Sequence == sequence
+                ? StartedQuest.Step
+                : -1;
+            _alliedDailyRouteItems.Add(_alliedDailyRouteEstimator.Estimate(id, (int)society,
+                _alliedDailyBatchStates[i].State, startedStep, _alliedDailyTurnInReady,
+                out AlliedDailyRouteEstimator.Note note));
+            _alliedDailyRouteNotes.Add(note);
+        }
+
+        index = AlliedDailyRoute.Pick(_alliedDailyRouteItems, startedIndex, _alliedDailyLastPickKind, territoryId,
+            position, _alliedDailyRoutePlan, out kind, out bool deferredTurnIn);
+        _alliedDailyRouteKey = key;
+        _alliedDailyRouteIndex = index;
+        _alliedDailyRouteKind = kind;
+        if (kind == AlliedDailyPickRoute)
+        {
+            if (deferredTurnIn && StartedQuest != null &&
+                AlliedDailyRouteEstimator.TryReadQuestWork(StartedQuest.Quest.Id, out byte startedSequence, out _) &&
+                StartedQuest.Sequence == startedSequence)
+            {
+                _alliedDailyResumeStep[StartedQuest.Quest.Id] = (startedSequence, StartedQuest.Step);
+            }
+
+            LogAlliedDailyRoute(startedIndex, deferredTurnIn, territoryId, position, pending);
+        }
+
+        return true;
+    }
+
+    /// <summary>路線換到下一個任務時寫一行：排出來的順序、理由、每一段的估計距離，給使用者回報用。</summary>
+    private void LogAlliedDailyRoute(int startedIndex, bool deferredTurnIn, uint territoryId, Vector3 position,
+        List<PendingLog> pending)
+    {
+        List<string> work = [];
+        List<string> turnIns = [];
+        foreach (int i in _alliedDailyRoutePlan)
+        {
+            AlliedDailyRoute.Item item = _alliedDailyRouteItems[i];
+            AlliedDailyRouteEstimator.Note note = _alliedDailyRouteNotes[i];
+            float cost = AlliedDailyRoute.TravelCost(item, territoryId, position, out bool viaTeleport);
+            string distance = item.Position == null ? "位置不明"
+                : item.TerritoryId != territoryId ? "在別的區域"
+                : string.Create(CultureInfo.InvariantCulture, $"離目前位置約 {cost:F0} 米{(viaTeleport ? "，傳送" : "")}");
+            string text = $"{_alliedDailyBatch[i].QuestId} 序列 {note.Sequence} 步驟 {note.Step}（{note.Label}，{distance}）";
+            (item.Segment == AlliedDailyRoute.SegmentWork ? work : turnIns).Add(text);
+        }
+
+        int next = _alliedDailyRoutePlan[0];
+        string reason = deferredTurnIn
+            ? $"{_alliedDailyBatch[startedIndex].QuestId} 只剩交任務，同一位委託人還有任務有目標要做，交任務留到最後一起交"
+            : _alliedDailyRouteItems[next].Segment == AlliedDailyRoute.SegmentWork
+                ? "還有目標的任務依「做完全部再回去交」總距離最短的順序"
+                : "目標都做完了，依距離交任務";
+        pending.Add(new PendingLog(LogLevel.Information,
+            "[部族日常] 路線：下一個 {QuestId}；理由：{Reason}；目標順序：{Work}；交任務：{TurnIns}",
+            [_alliedDailyBatch[next].QuestId, reason, work.Count > 0 ? string.Join(" → ", work) : "無",
+                turnIns.Count > 0 ? string.Join("、", turnIns) : "無"], null));
+    }
+
+    /// <summary>取出（並清掉）<see cref="_alliedDailyResumeStep"/> 裡這個任務在這個序列的步驟；沒有＝0（從頭）。</summary>
+    private int TakeAlliedDailyResumeStep(ElementId questId, byte sequence)
+    {
+        if (!_alliedDailyResumeStep.Remove(questId, out (byte Sequence, int Step) resume) || resume.Sequence != sequence)
+        {
+            return 0;
+        }
+
+        return resume.Step;
     }
 
     private bool IsInAlliedDailyBatch(ElementId id)

@@ -306,6 +306,7 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection.AddSingleton<GatheringPointRegistry>();
         serviceCollection.AddSingleton<QuestRegistry>();
         serviceCollection.AddSingleton<QuestController>();
+        serviceCollection.AddSingleton<AlliedDailyRouteEstimator>();
         serviceCollection.AddSingleton<CombatController>();
         serviceCollection.AddSingleton<GatheringController>();
         serviceCollection.AddSingleton<ContextMenuController>();
