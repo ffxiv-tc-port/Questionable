@@ -6,6 +6,22 @@
       "Sequence": 0,
       "Steps": [
         {
+          "TerritoryId": 418,
+          "InteractionType": "None",
+          "AetheryteShortcut": "Ishgard",
+          "AethernetShortcut": [
+            "[Ishgard] Aetheryte Plaza",
+            "[Ishgard] Firmament"
+          ],
+          "SkipConditions": {
+            "AetheryteShortcutIf": {
+              "InTerritory": [
+                886
+              ]
+            }
+          }
+        },
+        {
           "DataId": 1035529,
           "Position": {
             "X": -7.156494,

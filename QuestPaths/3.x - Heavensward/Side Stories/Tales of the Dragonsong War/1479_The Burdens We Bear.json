@@ -85,6 +85,17 @@
       "Sequence": 4,
       "Steps": [
         {
+          "Position": {
+            "X": -729.6362,
+            "Y": -136.38138,
+            "Z": -545.9192
+          },
+          "TerritoryId": 402,
+          "InteractionType": "WalkTo",
+          "StopDistance": 1,
+          "Fly": true
+        },
+        {
           "$": "Move to Tiamat's location before interaction; without this step, would often see qst stop before pathfinding",
           "Position": {
             "X": -698.36835,
