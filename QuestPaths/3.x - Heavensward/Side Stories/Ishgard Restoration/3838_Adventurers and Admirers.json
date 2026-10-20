@@ -20,7 +20,6 @@
           "SkipConditions": {
             "AetheryteShortcutIf": {
               "InTerritory": [
-                418,
                 886
               ]
             }
