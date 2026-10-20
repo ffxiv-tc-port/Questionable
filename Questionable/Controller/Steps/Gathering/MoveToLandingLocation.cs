@@ -19,11 +19,12 @@ internal static class MoveToLandingLocation
     (
         uint TerritoryId,
         bool FlyBetweenNodes,
-        GatheringNode GatheringNode) : ITask
+        GatheringNode GatheringNode,
+        bool WalkWithoutMount = false) : ITask
     {
         public override string ToString()
         {
-            return $"Land/{FlyBetweenNodes}";
+            return WalkWithoutMount ? $"Land/{FlyBetweenNodes}/walk" : $"Land/{FlyBetweenNodes}";
         }
     }
 
@@ -71,7 +72,7 @@ internal static class MoveToLandingLocation
                 target.ToString("G", CultureInfo.InvariantCulture), degrees, range);
 
             bool fly = Task.FlyBetweenNodes && gameFunctions.IsFlyingUnlocked(Task.TerritoryId);
-            _moveTask = new MoveTask(Task.TerritoryId, target, null, 0.25f,
+            _moveTask = new MoveTask(Task.TerritoryId, target, Task.WalkWithoutMount ? false : null, 0.25f,
                 Task.GatheringNode.DataId, Fly: fly, IgnoreDistanceToObject: true,
                 InteractionType: EInteractionType.Gather);
             return moveExecutor.Start(_moveTask);

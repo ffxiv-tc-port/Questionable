@@ -39,7 +39,9 @@ internal sealed unsafe class GatheringController
     IServiceProvider serviceProvider,
     InterruptHandler interruptHandler,
     IDataManager dataManager,
-    IPluginLog pluginLog) : MiniTaskController<GatheringController>(chatGui, condition, serviceProvider, interruptHandler, dataManager, logger)
+    IPluginLog pluginLog,
+    IClientState clientState,
+    Configuration configuration) : MiniTaskController<GatheringController>(chatGui, condition, serviceProvider, interruptHandler, dataManager, logger)
 {
     public enum EStatus
     {
@@ -62,7 +64,12 @@ internal sealed unsafe class GatheringController
     private readonly Regex _revisitRegex = DataManagerAdapter.GetRegex<LogMessage>(dataManager, 5574, x => x.Text, pluginLog)
                                            ?? throw new InvalidDataException("No regex found for revisit message");
 
+    private readonly IClientState _clientState = clientState;
+    private readonly Configuration _configuration = configuration;
+
     private CurrentRequest? _currentRequest;
+    private DateTime _lastWalkLogAt = DateTime.MinValue;
+    private int _suppressedWalkLogs;
 
     public bool Start(GatheringRequest gatheringRequest)
     {
@@ -158,9 +165,14 @@ internal sealed unsafe class GatheringController
         }
 
         uint territoryId = _currentRequest.Root.Steps.Last().TerritoryId;
-        _taskQueue.Enqueue(new Mount.MountTask(territoryId, Mount.EMountIf.Always));
+        bool walk = ShouldWalkToNode(territoryId, currentNode);
+        if (!walk)
+        {
+            _taskQueue.Enqueue(new Mount.MountTask(territoryId, Mount.EMountIf.Always));
+        }
 
-        bool fly = currentNode.Fly.GetValueOrDefault(_currentRequest.Root.FlyBetweenNodes.GetValueOrDefault(true)) &&
+        bool fly = !walk &&
+                   currentNode.Fly.GetValueOrDefault(_currentRequest.Root.FlyBetweenNodes.GetValueOrDefault(true)) &&
                    _gameFunctions.IsFlyingUnlocked(territoryId);
         if (currentNode.Locations.Count > 1)
         {
@@ -178,14 +190,59 @@ internal sealed unsafe class GatheringController
             }
 
             _taskQueue.Enqueue(new MoveTask(territoryId, pointOnFloor ?? averagePosition,
-                null, 50f, Fly: fly, IgnoreDistanceToObject: true, InteractionType: EInteractionType.WalkTo));
+                walk ? false : null, 50f, Fly: fly, IgnoreDistanceToObject: true, InteractionType: EInteractionType.WalkTo));
         }
 
-        _taskQueue.Enqueue(new MoveToLandingLocation.Task(territoryId, fly, currentNode));
+        _taskQueue.Enqueue(new MoveToLandingLocation.Task(territoryId, fly, currentNode, walk));
         _taskQueue.Enqueue(new Mount.UnmountTask());
         _taskQueue.Enqueue(new Interact.Task(currentNode.DataId, null, EInteractionType.Gather, true));
 
         QueueGatherNode(currentNode);
+    }
+
+    /// <summary>
+    ///     下一個採集點夠近、人又沒在坐騎上時改用走的（不排 MountTask、不飛、移動時不自動上坐騎）。
+    ///     只在框架執行緒（<see cref="Update" />）呼叫。
+    /// </summary>
+    private bool ShouldWalkToNode(uint territoryId, GatheringNode node)
+    {
+        float threshold = _configuration.General.GatheringWalkWithinDistance;
+        if (threshold <= 0 || _objectTable[0] is not { } player)
+        {
+            return false;
+        }
+
+        Vector3? activePosition = node.Locations.Count > 1
+            ? _objectTable.FirstOrDefault(x =>
+                x.ObjectKind == ObjectKind.GatheringPoint && x.IsTargetable &&
+                GameFunctions.GetBaseID(x) == node.DataId)?.Position
+            : null;
+        float distance = GatheringMountRule.DistanceToNextNode(player.Position,
+            node.Locations.Select(x => x.Position).ToList(), activePosition);
+        bool walk = GatheringMountRule.ShouldWalkInsteadOfMount(_condition[ConditionFlag.Mounted],
+            _clientState.TerritoryType == territoryId, _condition[ConditionFlag.Diving], distance, threshold);
+        if (walk)
+        {
+            LogWalkThrottled(node.DataId, distance, threshold);
+        }
+
+        return walk;
+    }
+
+    private void LogWalkThrottled(uint dataId, float distance, float threshold)
+    {
+        DateTime now = DateTime.Now;
+        if (now - _lastWalkLogAt < TimeSpan.FromSeconds(5))
+        {
+            ++_suppressedWalkLogs;
+            return;
+        }
+
+        _logger.LogDebug(
+            "Next gathering point {DataId} is {Distance:F1} yalms away (< {Threshold:F1}), walking without mount ({Suppressed} similar messages suppressed)",
+            dataId, distance, threshold, _suppressedWalkLogs);
+        _lastWalkLogAt = now;
+        _suppressedWalkLogs = 0;
     }
 
     private void QueueGatherNode(GatheringNode currentNode)

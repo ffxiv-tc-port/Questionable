@@ -181,6 +181,30 @@ internal sealed class GeneralConfigComponent : ConfigComponent
             Save();
         }
 
+        float gatheringWalkWithinDistance = Configuration.General.GatheringWalkWithinDistance;
+        ImGui.SetNextItemWidth(150f);
+        if (ImGui.DragFloat("Walk between nearby gathering points without mounting (yalms, 0 to disable)".Loc(),
+                ref gatheringWalkWithinDistance, 0.5f, 0f, 60f, "%.0f"))
+        {
+            Configuration.General.GatheringWalkWithinDistance = gatheringWalkWithinDistance;
+            Save();
+        }
+
+        ImGui.SameLine();
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+        {
+            ImGui.TextDisabled(FontAwesomeIcon.InfoCircle.ToIconString());
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            using (ImRaii.Tooltip())
+            {
+                ImGui.Text("While gathering (custom deliveries and quest gathering steps), if the next gathering point is closer than this straight-line distance, Questionable walks there instead of mounting and flying.".Loc());
+                ImGui.Text("If you are already mounted, nothing changes. Set to 0 to always mount like before. Default 20 yalms.".Loc());
+            }
+        }
+
         Configuration.EGearsetUpdateSource gearsetSource = Configuration.General.GearsetUpdateSource;
         if (ImGuiEx.EnumCombo("Preferred Gear Upgrade Source".Loc(), ref gearsetSource, names: GearsetUpdateSourceNames))
         {

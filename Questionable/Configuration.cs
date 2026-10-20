@@ -58,6 +58,9 @@ internal sealed class Configuration : IPluginConfiguration
         public bool NudgePositionOnAetheryteAttuneStuck { get; set; } = true;
         public float MovementStuckGraceSeconds { get; set; } = 2.5f;
         public float InteractionRangeStopDistance { get; set; } = 7f;
+
+        /// <summary>採集點之間直線距離小於這個值（米）就用走的、不上坐騎；0＝停用（一律上坐騎）。</summary>
+        public float GatheringWalkWithinDistance { get; set; } = 20f;
         public bool UseTickets { get; set; }
         public bool HideSponsorButton { get; set; }
         public bool DismissedReportWarning { get; set; }
