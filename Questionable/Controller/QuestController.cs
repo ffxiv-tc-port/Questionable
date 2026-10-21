@@ -1474,6 +1474,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     /// 持 <see cref="_progressLock"/> 呼叫：記錄一律走 <c>LogOrDefer</c>。
     /// 刻意不等的情況：主線暫停中（沒有任務可做就該停）、剛完成的任務是設定好的停止點
     /// （等到下一個任務時 <c>StartedQuest</c> 已是 null，停止點的判斷就再也走不到）、
+    /// 剛交完的是部族日常批次的最後一個（一般規則已經沒有任務，等也等不到）、
     /// 已等滿 <see cref="MaxAutoWaitForNextQuestSeconds"/>（回 false 讓呼叫端照它原本的方式停下）。
     /// </remarks>
     private bool TryWaitForNextQuest(string label, QuestProgress? finishedQuest)
@@ -1490,6 +1491,14 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             _configuration.Stop.QuestsToStopAfter.Contains(finishedQuest.Quest.Id) &&
             _questFunctions.IsQuestComplete(finishedQuest.Quest.Id))
         {
+            return false;
+        }
+
+        if (finishedQuest != null && IsAlliedDailyBatchFinishedBy(finishedQuest.Quest.Id))
+        {
+            LogOrDefer(LogLevel.Information,
+                "[部族日常] 排入的 {Count} 個任務都交完了，不等下一個任務、直接停下（最後交的是 {QuestId}）",
+                _alliedDailyBatch.Count, finishedQuest.Quest.Id);
             return false;
         }
 
@@ -1917,20 +1926,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         for (int i = 0; i < _alliedDailyBatch.Count; ++i)
         {
             (ElementId id, EAlliedSociety society) = _alliedDailyBatch[i];
-            int state = AlliedDailyDone;
-            if (IsInManualPriorityQuests(id))
-            {
-                if (_questFunctions.IsReadyToAcceptQuest(id))
-                {
-                    state = AlliedDailyReady;
-                }
-                else if (_questFunctions.IsQuestAccepted(id))
-                {
-                    state = AlliedDailyAccepted;
-                }
-            }
-
-            _alliedDailyBatchStates.Add(((int)society, state));
+            _alliedDailyBatchStates.Add(((int)society, GetAlliedDailyBatchState(id)));
             if (StartedQuest != null && StartedQuest.Quest.Id == id)
             {
                 startedIndex = i;
@@ -2219,6 +2215,45 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
         return resume.Step;
     }
+
+    private int GetAlliedDailyBatchState(ElementId id)
+    {
+        if (!IsInManualPriorityQuests(id))
+        {
+            return AlliedDailyDone;
+        }
+
+        if (_questFunctions.IsReadyToAcceptQuest(id))
+        {
+            return AlliedDailyReady;
+        }
+
+        return _questFunctions.IsQuestAccepted(id) ? AlliedDailyAccepted : AlliedDailyDone;
+    }
+
+    /// <summary>剛交的任務屬於這一次的部族日常批次，而且批次裡已經沒有可接或已接的任務。持鎖呼叫。</summary>
+    private bool IsAlliedDailyBatchFinishedBy(ElementId finishedQuestId)
+    {
+        bool finishedInBatch = IsInAlliedDailyBatch(finishedQuestId);
+        bool anyLeft = false;
+        if (finishedInBatch)
+        {
+            foreach ((ElementId id, EAlliedSociety _) in _alliedDailyBatch)
+            {
+                if (GetAlliedDailyBatchState(id) != AlliedDailyDone)
+                {
+                    anyLeft = true;
+                    break;
+                }
+            }
+        }
+
+        return ShouldStopAfterAlliedDailyBatch(finishedInBatch, _alliedDailyBatch.Count, anyLeft);
+    }
+
+    /// <summary><see cref="IsAlliedDailyBatchFinishedBy"/> 的純邏輯部分（離線可測）。</summary>
+    internal static bool ShouldStopAfterAlliedDailyBatch(bool finishedInBatch, int batchCount, bool anyLeft) =>
+        finishedInBatch && batchCount > 0 && !anyLeft;
 
     private bool IsInAlliedDailyBatch(ElementId id)
     {
