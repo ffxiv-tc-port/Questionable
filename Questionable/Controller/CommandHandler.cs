@@ -322,11 +322,13 @@ internal sealed class CommandHandler : IDisposable
                     List<string> taxiStands = [];
                     ExcelSheet<ChocoboTaxiStand> taxiStandNames = _dataManager.GetExcelSheet<ChocoboTaxiStand>();
                     UIState* uiState = UIState.Instance();
-                    for(byte i = 0; i < uiState->UnlockedChocoboTaxiStands.Length * 8; ++i)
+                    // IsChocoboTaxiStandUnlocked 吃的是車站 id（0x120000 起），不是位元索引。
+                    for(int i = 0; i < uiState->UnlockedChocoboTaxiStandsBitArray.BitCount; ++i)
                     {
-                        if (!(uiState->IsChocoboTaxiStandUnlocked(i)) && taxiStandNames.HasRow(i + 0x120000u))
+                        uint taxiStandId = (uint)i + 0x120000u;
+                        if (!uiState->IsChocoboTaxiStandUnlocked(taxiStandId) && taxiStandNames.HasRow(taxiStandId))
                         {
-                            ChocoboTaxiStand row = taxiStandNames.GetRow(i + 0x120000u);
+                            ChocoboTaxiStand row = taxiStandNames.GetRow(taxiStandId);
                             // 0 and 1 are unused
                             if (row.TargetLocations[0].RowId >= 2)
                             {
