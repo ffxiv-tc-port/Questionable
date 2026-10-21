@@ -11,7 +11,7 @@ using System;
 namespace Questionable.External;
 
 /// <summary>
-/// 在 Questionable 跑自動化的期間請 YesAlready 讓開。
+/// 在 Questionable 跑自動化的期間、以及人在任務戰鬥副本裡（不論有沒有在跑）請 YesAlready 讓開。
 /// </summary>
 /// <remarks>
 /// 🔴🔴 <b>用具名租約的理由＝全域開關沒有主人。</b>
@@ -177,13 +177,13 @@ internal sealed class YesAlreadyIpc : IDisposable
         if (!ready)
             return;
 
-        // BossMod 代打的任務戰鬥裡 Questionable 仍會按比對過文字的確認框，要繼續壓住 YesAlready 免得同幀搶按。
+        // 任務戰鬥副本裡 InteractionUiController 不管自動化有沒有在跑都會答確認框（手動打也一樣），
+        // 條件要與它的 ShouldHandleUiInteractions 副本分支一致，否則兩邊在 PostSetup 同幀搶按。
         ushort territoryId = _clientState.TerritoryType;
-        bool hasActiveQuest = (_questController.IsRunning ||
-                               _questController.AutomationType != QuestController.EAutomationType.Manual) &&
-                              (!_territoryData.IsDutyInstance(territoryId) ||
-                               (_territoryData.IsQuestBattleInstance(territoryId) &&
-                                _questController.HasPendingSinglePlayerDutyWithBossMod()));
+        bool hasActiveQuest = _territoryData.IsQuestBattleInstance(territoryId) ||
+                              ((_questController.IsRunning ||
+                                _questController.AutomationType != QuestController.EAutomationType.Manual) &&
+                               !_territoryData.IsDutyInstance(territoryId));
 
         if (_leaseSupported != false)
         {
@@ -197,7 +197,7 @@ internal sealed class YesAlreadyIpc : IDisposable
             }
             else
             {
-                ReleaseLease("Questionable 的自動化已結束");
+                ReleaseLease("Questionable 的自動化已結束，且不在任務戰鬥副本裡");
                 return;
             }
         }
