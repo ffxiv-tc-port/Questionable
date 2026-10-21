@@ -9,7 +9,12 @@ namespace Questionable.Model;
 internal interface IQuestInfo
 {
     public ElementId QuestId { get; }
+    /// <summary>顯示用名稱（UI、log、任務檔名）；可能帶插件自加的區分後綴，不可拿去比對遊戲文字。</summary>
     public string Name { get; }
+
+    /// <summary>遊戲畫面上的原文名稱，拿去跟遊戲選單文字比對時一律用這個。</summary>
+    public string GameName { get; }
+
     public uint IssuerDataId { get; }
     public bool IsRepeatable { get; }
     public ImmutableList<PreviousQuestInfo> PreviousQuests { get; }

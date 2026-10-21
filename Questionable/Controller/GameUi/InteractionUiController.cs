@@ -334,11 +334,11 @@ internal sealed class InteractionUiController : IDisposable
         List<string?> answers)
     {
         // it is possible for this to be a quest selection
-        string questName = quest.Info.Name;
+        string questName = quest.Info.GameName;
         int questSelection = answers.FindIndex(x => GameFunctions.GameStringEquals(questName, x));
         if (questSelection >= 0)
         {
-            _logger.LogInformation("Selecting quest {QuestName}", questName);
+            _logger.LogInformation("Selecting quest {QuestName}", quest.Info.Name);
             AddonPressGuard.PressCallbackInt("SelectIconString", &addonSelectIconString->AtkUnitBase, questSelection);
             return true;
         }

@@ -22,6 +22,7 @@ internal sealed class SatisfactionSupplyInfo : IQuestInfo
 
     public ElementId QuestId { get; }
     public string Name { get; }
+    public string GameName => Name;
     public uint IssuerDataId { get; }
     public bool IsRepeatable => true;
     public ImmutableList<PreviousQuestInfo> PreviousQuests { get; }

@@ -12,6 +12,7 @@ internal sealed class AlliedSocietyDailyInfo(BeastTribe beastTribe, byte rank, C
 {
     public ElementId QuestId { get; } = new AlliedSocietyDailyId((byte)beastTribe.RowId, rank);
     public string Name { get; } = beastTribe.Name.ToString();
+    public string GameName => Name;
     public uint IssuerDataId => 0;
     public ImmutableList<PreviousQuestInfo> PreviousQuests { get; } = [];
     public EQuestJoin PreviousQuestJoin => EQuestJoin.All;

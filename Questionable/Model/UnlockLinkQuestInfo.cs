@@ -8,6 +8,7 @@ internal sealed class UnlockLinkQuestInfo(UnlockLinkId unlockLinkId, string name
 {
     public ElementId QuestId { get; } = unlockLinkId;
     public string Name { get; } = name;
+    public string GameName => Name;
     public uint IssuerDataId { get; } = issuerDataId;
     public bool IsRepeatable => false;
     public ImmutableList<PreviousQuestInfo> PreviousQuests => [];

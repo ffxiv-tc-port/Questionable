@@ -37,7 +37,8 @@ internal sealed class QuestInfo : IQuestInfo
             var _ => ""
         };
 
-        Name = $"{quest.Name}{suffix}";
+        GameName = $"{quest.Name}";
+        Name = $"{GameName}{suffix}";
         Level = quest.ClassJobLevel[0];
         IssuerDataId = quest.IssuerStart.RowId;
         IsRepeatable = quest.IsRepeatable;
@@ -108,6 +109,7 @@ internal sealed class QuestInfo : IQuestInfo
 
     public ElementId QuestId { get; }
     public string Name { get; }
+    public string GameName { get; }
     public ushort Level { get; }
     public uint IssuerDataId { get; }
     public bool IsRepeatable { get; }

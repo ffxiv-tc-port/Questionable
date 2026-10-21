@@ -91,7 +91,7 @@ internal sealed class QuestSelectionWindow : LWindow
             {
                 List<string?> answers = InteractionUiController.GetChoices(addonSelectIconString);
                 _offeredQuests = _quests
-                    .Where(x => answers.Any(y => GameFunctions.GameStringEquals(x.Name, y)))
+                    .Where(x => answers.Any(y => GameFunctions.GameStringEquals(x.GameName, y)))
                     .ToList();
             }
             else
