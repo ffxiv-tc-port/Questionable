@@ -26,18 +26,28 @@ internal sealed class ArtisanIpc(IDalamudPluginInterface pluginInterface, ILogge
         }
     }
 
+    private bool _enduranceStatusErrorLogged;
+
     /// <summary>
     ///     This ignores crafting lists, but we can't create/use those.
     /// </summary>
+    /// <remarks>只在框架執行緒呼叫；會被每幀呼叫，所以問不到時只在每段失敗期間的第一次寫 Error。</remarks>
     public bool IsCrafting()
     {
         try
         {
-            return _getEnduranceStatus.InvokeFunc();
+            bool crafting = _getEnduranceStatus.InvokeFunc();
+            _enduranceStatusErrorLogged = false;
+            return crafting;
         }
         catch(IpcError e)
         {
-            _logger.LogError(e, "Unable to check for Artisan endurance status");
+            if (!_enduranceStatusErrorLogged)
+            {
+                _enduranceStatusErrorLogged = true;
+                _logger.LogError(e, "Unable to check for Artisan endurance status (logged once until it works again)");
+            }
+
             return false;
         }
     }

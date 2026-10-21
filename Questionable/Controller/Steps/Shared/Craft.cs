@@ -61,7 +61,11 @@ internal static class Craft
         QuestController questController,
         IChatGui chatGui) : TaskExecutor<CraftTask>
     {
+        private const long CraftingPollMilliseconds = 500;
+
         private readonly HqCraftShortfallWatch _hqShortfallWatch = new();
+        private bool _lastIsCrafting;
+        private long _nextCraftingPollAt = long.MinValue;
         private EItemQuality _itemQuality = EItemQuality.Any;
         private int _previousCount;
         private int _startingItemCount;
@@ -175,8 +179,16 @@ internal static class Craft
             }
 
             bool requiresHq = _itemQuality == EItemQuality.HQ;
-            if (_hqShortfallWatch.Update(requiresHq, requiresHq && artisanIpc.IsCrafting(), currentCount,
-                    Task.ItemCount, Environment.TickCount64))
+            long now = Environment.TickCount64;
+            // 提示監看要等 Artisan 停下滿數秒才判，每 0.5 秒問一次 IPC 就夠，不必每幀問。
+            if (requiresHq && now >= _nextCraftingPollAt)
+            {
+                _nextCraftingPollAt = now + CraftingPollMilliseconds;
+                _lastIsCrafting = artisanIpc.IsCrafting();
+            }
+
+            if (_hqShortfallWatch.Update(requiresHq, requiresHq && _lastIsCrafting, currentCount,
+                    Task.ItemCount, now))
             {
                 NotifyHqShortfall(currentCount);
             }
