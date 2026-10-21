@@ -53,6 +53,7 @@ internal sealed class QuestionableIpc : IDisposable
     private const string IpcStop = "Questionable.Stop";
     private const string IpcRedoLookup = "Questionable.RedoLookup";
     private const string IpcRedoLookupIndex = "Questionable.RedoLookupIndex";
+    private const string IpcStartAlliedSocietyDailies = "Questionable.StartAlliedSocietyDailies";
     private readonly ICallGateProvider<string, bool> _addQuestPriority;
     private readonly ICallGateProvider<bool> _clearQuestPriority;
     private readonly ICallGateProvider<string> _exportQuestPriority;
@@ -86,6 +87,7 @@ internal sealed class QuestionableIpc : IDisposable
     private readonly ICallGateProvider<uint, uint, byte, int, ushort, bool> _startGatheringComplex;
     private readonly ICallGateProvider<string, bool> _startQuest;
     private readonly ICallGateProvider<string, bool> _startSingleQuest;
+    private readonly ICallGateProvider<bool> _startAlliedSocietyDailies;
     private readonly ICallGateProvider<string, bool> _stop;
 
     public QuestionableIpc(
@@ -129,6 +131,11 @@ internal sealed class QuestionableIpc : IDisposable
         _startSingleQuest = pluginInterface.GetIpcProvider<string, bool>(IpcStartSingleQuest);
         _startSingleQuest.RegisterFunc(questId =>
             _gate.Get(IpcStartSingleQuest, () => StartQuest(questId, true), false));
+
+        // 沒有可做的部族日常時回 false、不開始（不像 /qst start 會退回一般選任務規則）。
+        _startAlliedSocietyDailies = pluginInterface.GetIpcProvider<bool>(IpcStartAlliedSocietyDailies);
+        _startAlliedSocietyDailies.RegisterFunc(() => _gate.Get(IpcStartAlliedSocietyDailies,
+            () => questController.TryStartAlliedSocietyDailies("IPC allied dailies"), false));
 
         _isQuestLocked = pluginInterface.GetIpcProvider<string, bool>(IpcIsQuestLocked);
         // ⚠️ 不可用時回 true：與這一支自己「查不到任務就當作鎖著」的既有預設一致。
@@ -200,6 +207,7 @@ internal sealed class QuestionableIpc : IDisposable
         _getCurrentlyActiveEventQuests.UnregisterFunc();
         _startQuest.UnregisterFunc();
         _startSingleQuest.UnregisterFunc();
+        _startAlliedSocietyDailies.UnregisterFunc();
         _isQuestLocked.UnregisterFunc();
         _isQuestComplete.UnregisterFunc();
         _isReadyToAcceptQuest.UnregisterFunc();

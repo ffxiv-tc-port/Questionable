@@ -1757,10 +1757,76 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     }
 
     /// <summary>
+    /// IPC <c>Questionable.StartAlliedSocietyDailies</c> 的本體：今天有友好部族日常可排才走 <see cref="Start"/>，
+    /// 否則回 <see langword="false"/> 並寫一行 Information 說明原因。框架執行緒呼叫。
+    /// </summary>
+    /// <remarks>批次空時刻意不開始：<see cref="Start"/> 會退回一般選任務規則，做出呼叫端沒預期的任務。</remarks>
+    public bool TryStartAlliedSocietyDailies(string label)
+    {
+        bool running = IsRunning || AutomationType != EAutomationType.Manual;
+        string? blocker = running ? null : GetAlliedDailyStartBlocker();
+        int societyCount = _configuration.General.AutoQueueAlliedSocietyDailies.Count;
+        AlliedDailyPlan? plan = null;
+        if (!running && blocker == null && societyCount > 0)
+        {
+            plan = PlanAlliedSocietyDailies();
+            if (plan == null)
+            {
+                blocker = "讀不到任務資料（QuestManager 為空）";
+            }
+        }
+
+        int decision = DecideAlliedDailyIpcStart(running, blocker == null, societyCount,
+            plan?.Outcomes ?? (IReadOnlyList<int>)Array.Empty<int>());
+        if (decision == AlliedDailyIpcStart)
+        {
+            LogOrDefer(LogLevel.Information, "[部族日常] {Label}：今天有 {Count} 個部族日常可做，開始",
+                label, plan!.Batch.Count);
+            Start(label);
+            return true;
+        }
+
+        string details = plan is { NotQueued.Count: > 0 } ? string.Join("；", plan.NotQueued) : "勾選的部族今天都沒有任務";
+        string reason = decision switch
+        {
+            AlliedDailyIpcAlreadyRunning => "Questionable 已經在跑",
+            AlliedDailyIpcCannotStart => $"現在不能開始：{blocker}",
+            AlliedDailyIpcNoSocieties => "設定裡沒有勾選任何要自動排入日常的友好部族",
+            AlliedDailyIpcNoAllowance => $"今日友好部族任務次數已用完（{details}）",
+            AlliedDailyIpcAllDone => $"勾選的部族今天能接的都做完了（{details}）",
+            _ => $"勾選的部族今天沒有能接的任務（{details}）",
+        };
+        LogOrDefer(LogLevel.Information, "[部族日常] {Label}：不開始，{Reason}", label, reason);
+        return false;
+    }
+
+    /// <summary>開始了也不會先做部族日常、或根本跑不起來的情況；<see langword="null"/>＝可以開始。</summary>
+    private string? GetAlliedDailyStartBlocker()
+    {
+        if (!_configuration.IsPluginSetupComplete())
+        {
+            return "還沒完成首次設定";
+        }
+
+        if (!_clientState.IsLoggedIn)
+        {
+            return "還沒登入角色";
+        }
+
+        // 模擬／指定下一個／採集任務排在批次選任務之前（見 CurrentQuestDetails），開始會先做那個。
+        if (CurrentQuestDetails is { Type: not ECurrentQuestType.Normal } other)
+        {
+            return $"已指定 {other.Progress.Quest.Id}（{other.Type}）要先做";
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// 依 <see cref="Configuration.GeneralConfiguration.AutoQueueAlliedSocietyDailies"/> 把今天的友好部族日常排進優先清單，
     /// 並記成這一次的批次（選任務見 <see cref="TryPickAlliedDailyBatchQuest"/>）。框架執行緒呼叫。
     /// </summary>
-    /// <remarks>已接未交的照樣列入（不占次數）；還沒接的受「今日剩餘次數」與「每部族每天 3 個」兩個上限限制。</remarks>
+    /// <remarks>排哪些由 <see cref="PlanAlliedSocietyDailies"/> 決定，與 <see cref="TryStartAlliedSocietyDailies"/> 共用。</remarks>
     private void QueueAlliedSocietyDailies()
     {
         HashSet<EAlliedSociety> societies = _configuration.General.AutoQueueAlliedSocietyDailies;
@@ -1774,89 +1840,22 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             return;
         }
 
-        uint allowance;
-        unsafe
+        AlliedDailyPlan? plan = PlanAlliedSocietyDailies();
+        if (plan == null)
         {
-            QuestManager* questManager = QuestManager.Instance();
-            if (questManager == null)
-            {
-                LogOrDefer(LogLevel.Information, "[部族日常] 沒有排入：讀不到任務資料（QuestManager 為空）");
-                return;
-            }
-
-            allowance = questManager->GetBeastTribeAllowance();
+            LogOrDefer(LogLevel.Information, "[部族日常] 沒有排入：讀不到任務資料（QuestManager 為空）");
+            return;
         }
 
-        List<(ElementId QuestId, EAlliedSociety Society)> batch = [];
-        List<string> queued = [];
-        List<string> notQueued = [];
-        uint remaining = allowance;
-        foreach (EAlliedSociety society in Enum.GetValues<EAlliedSociety>())
+        foreach ((ElementId questId, EAlliedSociety _) in plan.Batch)
         {
-            if (society == EAlliedSociety.None || !societies.Contains(society))
-            {
-                continue;
-            }
-
-            List<QuestId> available = _alliedSocietyQuestFunctions.GetAvailableAlliedSocietyQuests(society);
-            if (available.Count == 0)
-            {
-                notQueued.Add($"{society}：今天沒有可接的任務（聲望未解鎖？）");
-                continue;
-            }
-
-            int usedToday = 0;
-            foreach (QuestId questId in available)
-            {
-                if (_questFunctions.IsQuestAccepted(questId) || IsDailyQuestCompletedToday(questId))
-                {
-                    usedToday++;
-                }
-            }
-
-            int societySlots = Math.Max(0, MaxDailyQuestsPerAlliedSociety - usedToday);
-            foreach (QuestId questId in available)
-            {
-                if (!_questRegistry.TryGetQuest(questId, out Quest? quest))
-                {
-                    notQueued.Add($"{society} {questId}：沒有路線");
-                    continue;
-                }
-
-                string name = $"{questId} {quest.Info.Name}";
-                if (_questFunctions.IsQuestAccepted(questId))
-                {
-                    AddQuestPriority(questId);
-                    batch.Add((questId, society));
-                    queued.Add($"{name}（已接）");
-                }
-                else if (!_questFunctions.IsReadyToAcceptQuest(questId))
-                {
-                    notQueued.Add(IsDailyQuestCompletedToday(questId) ? $"{name}：今天已完成" : $"{name}：目前不能接");
-                }
-                else if (remaining == 0)
-                {
-                    notQueued.Add($"{name}：今日次數已用完");
-                }
-                else if (societySlots == 0)
-                {
-                    notQueued.Add($"{name}：{society} 今天已接滿 {MaxDailyQuestsPerAlliedSociety} 個");
-                }
-                else
-                {
-                    AddQuestPriority(questId);
-                    batch.Add((questId, society));
-                    queued.Add(name);
-                    remaining--;
-                    societySlots--;
-                }
-            }
+            AddQuestPriority(questId);
         }
 
         lock(_progressLock)
         {
             _alliedDailyBatch.Clear();
-            _alliedDailyBatch.AddRange(batch);
+            _alliedDailyBatch.AddRange(plan.Batch);
             _alliedDailyBatchIdleLogged = false;
             _alliedDailyBatchStateKey = null;
             _alliedDailyLastPickKind = 0;
@@ -1878,12 +1877,12 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             }
         }
 
-        string reasons = notQueued.Count > 0 ? string.Join("；", notQueued) : "勾選的部族今天都沒有任務";
-        if (queued.Count > 0)
+        string reasons = plan.NotQueued.Count > 0 ? string.Join("；", plan.NotQueued) : "勾選的部族今天都沒有任務";
+        if (plan.Queued.Count > 0)
         {
             LogOrDefer(LogLevel.Information, "[部族日常] 排入：{Quests}（今日剩 {Allowance} 次）",
-                string.Join("、", queued), allowance);
-            if (notQueued.Count > 0)
+                string.Join("、", plan.Queued), plan.Allowance);
+            if (plan.NotQueued.Count > 0)
             {
                 LogOrDefer(LogLevel.Information, "[部族日常] 沒排入的：{Reasons}", reasons);
             }
@@ -1891,8 +1890,212 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         else
         {
             LogOrDefer(LogLevel.Information, "[部族日常] 沒有排入任何任務（今日剩 {Allowance} 次）：{Reasons}",
-                allowance, reasons);
+                plan.Allowance, reasons);
         }
+    }
+
+    private sealed class AlliedDailyPlan
+    {
+        public required uint Allowance { get; init; }
+        public List<(ElementId QuestId, EAlliedSociety Society)> Batch { get; } = [];
+
+        /// <summary>每個可接清單裡的任務一個 <c>AlliedDailyPlan*</c>，跨部族依排入順序。</summary>
+        public List<int> Outcomes { get; } = [];
+        public List<string> Queued { get; } = [];
+        public List<string> NotQueued { get; } = [];
+    }
+
+    /// <summary>只讀不改：算出這次「開始」會排入哪些部族日常。讀不到 QuestManager 時回 <see langword="null"/>。</summary>
+    private AlliedDailyPlan? PlanAlliedSocietyDailies()
+    {
+        HashSet<EAlliedSociety> societies = _configuration.General.AutoQueueAlliedSocietyDailies;
+        uint allowance;
+        unsafe
+        {
+            QuestManager* questManager = QuestManager.Instance();
+            if (questManager == null)
+            {
+                return null;
+            }
+
+            allowance = questManager->GetBeastTribeAllowance();
+        }
+
+        AlliedDailyPlan plan = new() { Allowance = allowance };
+        List<(bool HasRoute, bool Accepted, bool Ready, bool DoneToday)> facts = [];
+        List<Quest?> quests = [];
+        List<int> outcomes = [];
+        uint remaining = allowance;
+        foreach (EAlliedSociety society in Enum.GetValues<EAlliedSociety>())
+        {
+            if (society == EAlliedSociety.None || !societies.Contains(society))
+            {
+                continue;
+            }
+
+            List<QuestId> available = _alliedSocietyQuestFunctions.GetAvailableAlliedSocietyQuests(society);
+            if (available.Count == 0)
+            {
+                plan.NotQueued.Add($"{society}：今天沒有可接的任務（聲望未解鎖？）");
+                continue;
+            }
+
+            facts.Clear();
+            quests.Clear();
+            foreach (QuestId questId in available)
+            {
+                bool hasRoute = _questRegistry.TryGetQuest(questId, out Quest? quest);
+                bool accepted = _questFunctions.IsQuestAccepted(questId);
+                bool ready = hasRoute && !accepted && _questFunctions.IsReadyToAcceptQuest(questId);
+                facts.Add((hasRoute, accepted, ready, IsDailyQuestCompletedToday(questId)));
+                quests.Add(quest);
+            }
+
+            outcomes.Clear();
+            PlanAlliedDailySociety(facts, ref remaining, outcomes);
+            for (int i = 0; i < available.Count; ++i)
+            {
+                QuestId questId = available[i];
+                int outcome = outcomes[i];
+                plan.Outcomes.Add(outcome);
+                if (outcome == AlliedDailyPlanNoRoute)
+                {
+                    plan.NotQueued.Add($"{society} {questId}：沒有路線");
+                    continue;
+                }
+
+                string name = $"{questId} {quests[i]!.Info.Name}";
+                switch (outcome)
+                {
+                    case AlliedDailyPlanQueueAccepted:
+                        plan.Batch.Add((questId, society));
+                        plan.Queued.Add($"{name}（已接）");
+                        break;
+                    case AlliedDailyPlanQueue:
+                        plan.Batch.Add((questId, society));
+                        plan.Queued.Add(name);
+                        break;
+                    case AlliedDailyPlanDoneToday:
+                        plan.NotQueued.Add($"{name}：今天已完成");
+                        break;
+                    case AlliedDailyPlanNotAcceptable:
+                        plan.NotQueued.Add($"{name}：目前不能接");
+                        break;
+                    case AlliedDailyPlanNoAllowance:
+                        plan.NotQueued.Add($"{name}：今日次數已用完");
+                        break;
+                    default:
+                        plan.NotQueued.Add($"{name}：{society} 今天已接滿 {MaxDailyQuestsPerAlliedSociety} 個");
+                        break;
+                }
+            }
+        }
+
+        return plan;
+    }
+
+    internal const int AlliedDailyPlanQueue = 1;
+    internal const int AlliedDailyPlanQueueAccepted = 2;
+    internal const int AlliedDailyPlanNoRoute = 3;
+    internal const int AlliedDailyPlanDoneToday = 4;
+    internal const int AlliedDailyPlanNotAcceptable = 5;
+    internal const int AlliedDailyPlanNoAllowance = 6;
+    internal const int AlliedDailyPlanSocietyFull = 7;
+
+    /// <summary><see cref="PlanAlliedSocietyDailies"/> 對單一部族的純邏輯部分（不碰遊戲狀態，離線可測）。</summary>
+    /// <param name="quests">該部族今天的可接清單；<c>Ready</c> 只在有路線且未接時有意義。</param>
+    /// <param name="remaining">今日剩餘次數，跨部族遞減。</param>
+    /// <param name="outcomes">依 <paramref name="quests"/> 順序附加一個 <c>AlliedDailyPlan*</c>。</param>
+    /// <remarks>已接未交的照樣列入（不占次數）；還沒接的受「今日剩餘次數」與「每部族每天 3 個」兩個上限限制。</remarks>
+    internal static void PlanAlliedDailySociety(
+        IReadOnlyList<(bool HasRoute, bool Accepted, bool Ready, bool DoneToday)> quests, ref uint remaining,
+        List<int> outcomes)
+    {
+        int usedToday = 0;
+        foreach ((bool _, bool accepted, bool _, bool doneToday) in quests)
+        {
+            if (accepted || doneToday)
+            {
+                usedToday++;
+            }
+        }
+
+        int societySlots = Math.Max(0, MaxDailyQuestsPerAlliedSociety - usedToday);
+        foreach ((bool hasRoute, bool accepted, bool ready, bool doneToday) in quests)
+        {
+            if (!hasRoute)
+            {
+                outcomes.Add(AlliedDailyPlanNoRoute);
+            }
+            else if (accepted)
+            {
+                outcomes.Add(AlliedDailyPlanQueueAccepted);
+            }
+            else if (!ready)
+            {
+                outcomes.Add(doneToday ? AlliedDailyPlanDoneToday : AlliedDailyPlanNotAcceptable);
+            }
+            else if (remaining == 0)
+            {
+                outcomes.Add(AlliedDailyPlanNoAllowance);
+            }
+            else if (societySlots == 0)
+            {
+                outcomes.Add(AlliedDailyPlanSocietyFull);
+            }
+            else
+            {
+                outcomes.Add(AlliedDailyPlanQueue);
+                remaining--;
+                societySlots--;
+            }
+        }
+    }
+
+    internal const int AlliedDailyIpcStart = 0;
+    internal const int AlliedDailyIpcAlreadyRunning = 1;
+    internal const int AlliedDailyIpcCannotStart = 2;
+    internal const int AlliedDailyIpcNoSocieties = 3;
+    internal const int AlliedDailyIpcNoAllowance = 4;
+    internal const int AlliedDailyIpcAllDone = 5;
+    internal const int AlliedDailyIpcNothingAvailable = 6;
+
+    /// <summary><see cref="TryStartAlliedSocietyDailies"/> 的純邏輯部分（不碰遊戲狀態，離線可測）。</summary>
+    /// <param name="outcomes"><see cref="PlanAlliedDailySociety"/> 跨部族的結果；有排入的才回 <see cref="AlliedDailyIpcStart"/>。</param>
+    internal static int DecideAlliedDailyIpcStart(bool running, bool canStart, int selectedSocieties,
+        IReadOnlyList<int> outcomes)
+    {
+        if (running)
+        {
+            return AlliedDailyIpcAlreadyRunning;
+        }
+
+        if (!canStart)
+        {
+            return AlliedDailyIpcCannotStart;
+        }
+
+        if (selectedSocieties == 0)
+        {
+            return AlliedDailyIpcNoSocieties;
+        }
+
+        bool noAllowance = false;
+        bool doneToday = false;
+        foreach (int outcome in outcomes)
+        {
+            if (outcome is AlliedDailyPlanQueue or AlliedDailyPlanQueueAccepted)
+            {
+                return AlliedDailyIpcStart;
+            }
+
+            noAllowance |= outcome == AlliedDailyPlanNoAllowance;
+            doneToday |= outcome is AlliedDailyPlanDoneToday or AlliedDailyPlanSocietyFull;
+        }
+
+        return noAllowance ? AlliedDailyIpcNoAllowance
+            : doneToday ? AlliedDailyIpcAllDone
+            : AlliedDailyIpcNothingAvailable;
     }
 
     private static unsafe bool IsDailyQuestCompletedToday(QuestId questId)
