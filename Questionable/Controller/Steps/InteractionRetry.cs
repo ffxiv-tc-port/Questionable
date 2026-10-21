@@ -17,6 +17,9 @@ internal sealed class InteractionRetry
 
     private static readonly TimeSpan BusyLogAfter = TimeSpan.FromSeconds(10);
 
+    /// <summary>從沒送出過（距離外、找不到物件）時的再試間隔；不節流就會每幀互動一次。</summary>
+    public static readonly TimeSpan NotSentRetryDelay = TimeSpan.FromSeconds(0.5);
+
     private static readonly ConditionFlag[] BusyFlags =
     [
         ConditionFlag.OccupiedInEvent,
@@ -36,6 +39,7 @@ internal sealed class InteractionRetry
     private DateTime _idleSince = DateTime.MinValue;
     private DateTime _busySince = DateTime.MinValue;
     private bool _busyLogged;
+    private DateTime _notSentRetryAt = DateTime.MinValue;
 
     public int Attempts => _attempts;
 
@@ -64,6 +68,23 @@ internal sealed class InteractionRetry
         _attempts++;
         _reacted = false;
         _idleSince = now;
+    }
+
+    /// <summary>
+    /// 試過一次互動之後呼叫：這次真的送出、或之前已送出過，算一次（<see cref="OnSent()"/>）；
+    /// 從沒送出過的不算進 <see cref="MaxAttempts"/>，只等 <see cref="NotSentRetryDelay"/> 再試，交給路線重新規劃與微幅移位處理。
+    /// </summary>
+    public void OnTried(bool sent) => OnTried(sent, DateTime.Now);
+
+    internal void OnTried(bool sent, DateTime now)
+    {
+        if (sent || _attempts > 0)
+        {
+            OnSent(now);
+            return;
+        }
+
+        _notSentRetryAt = now + NotSentRetryDelay;
     }
 
     /// <returns><see langword="true"/>＝現在該送：第一次，或上一發之後遊戲已閒置滿 <see cref="ResponseTimeout"/> 而步驟仍未完成。</returns>
@@ -99,7 +120,7 @@ internal sealed class InteractionRetry
         _busySince = DateTime.MinValue;
         if (_attempts == 0)
         {
-            return true;
+            return now >= _notSentRetryAt;
         }
 
         if (now - _idleSince < ResponseTimeout)

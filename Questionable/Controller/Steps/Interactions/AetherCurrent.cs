@@ -81,9 +81,10 @@ internal static class AetherCurrent
 
             if (_retry.ShouldSend(condition, logger, Task))
             {
+                bool sent = false;
                 ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
-                    gameFunctions.InteractWith(Task.DataId, ObjectKind.EventObj));
-                _retry.OnSent();
+                    sent = gameFunctions.InteractWith(Task.DataId, ObjectKind.EventObj));
+                _retry.OnTried(sent);
             }
 
             return ETaskResult.StillRunning;

@@ -74,9 +74,10 @@ internal static class AetheryteFreeOrFavored
 
             if (_retry.ShouldSend(condition, logger, Task))
             {
+                bool sent = false;
                 ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
-                    gameFunctions.InteractWith((uint)Task.AetheryteLocation, ObjectKind.Aetheryte));
-                _retry.OnSent();
+                    sent = gameFunctions.InteractWith((uint)Task.AetheryteLocation, ObjectKind.Aetheryte));
+                _retry.OnTried(sent);
             }
 
             return ETaskResult.StillRunning;
