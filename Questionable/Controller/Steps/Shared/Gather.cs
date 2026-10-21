@@ -82,6 +82,13 @@ internal static class Gather
                     .ToList();
                 if (gatheringJobs.Count > 0)
                 {
+                    // 背包已夠就不必換套組或停下（與下面採集前的同一個判斷）。
+                    if (HasRequiredItems(Task.GatheredItem))
+                    {
+                        logger.LogInformation("Already have enough of item {ItemId} as {CurrentJob}, skipping the gatherer job switch", itemId, currentClassJob);
+                        yield break;
+                    }
+
                     string reason = $"No gathering point found for item {itemId} as {currentClassJob}, gatherable as {string.Join("/", gatheringJobs)}";
                     string chatMessage =
                         "Switch to ?? first: your current job (??) has no gathering point for ??. Automatic questing has been stopped; press Start again after switching.".Loc(
