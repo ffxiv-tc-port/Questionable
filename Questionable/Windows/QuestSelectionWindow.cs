@@ -90,9 +90,14 @@ internal sealed class QuestSelectionWindow : LWindow
             if (_gameGui.TryGetAddonByName("SelectIconString", out AddonSelectIconString* addonSelectIconString))
             {
                 List<string?> answers = InteractionUiController.GetChoices(addonSelectIconString);
-                _offeredQuests = _quests
+                List<IQuestInfo> matched = _quests
                     .Where(x => answers.Any(y => GameFunctions.GameStringEquals(x.GameName, y)))
                     .ToList();
+                HashSet<IQuestInfo> kept = matched
+                    .GroupBy(x => x.GameName)
+                    .SelectMany(NarrowSameNameQuests)
+                    .ToHashSet();
+                _offeredQuests = matched.Where(kept.Contains).ToList();
             }
             else
             {
@@ -106,6 +111,20 @@ internal sealed class QuestSelectionWindow : LWindow
         }
 
         IsOpenAndUncollapsed = _quests.Count > 0;
+    }
+
+    // 同一 NPC 的同名任務（各職業版「冒險者入門」等）遊戲只列角色能接的那個；
+    // 全部被濾掉時保留原組，不藏起遊戲確實列出的選項。
+    private IEnumerable<IQuestInfo> NarrowSameNameQuests(IGrouping<string, IQuestInfo> group)
+    {
+        List<IQuestInfo> quests = group.ToList();
+        if (quests.Count < 2)
+            return quests;
+
+        List<IQuestInfo> acceptable = quests
+            .Where(x => _questFunctions.IsReadyToAcceptQuest(x.QuestId) || _questFunctions.IsQuestAccepted(x.QuestId))
+            .ToList();
+        return acceptable.Count > 0 ? acceptable : quests;
     }
 
     public unsafe void OpenForCurrentZone()
