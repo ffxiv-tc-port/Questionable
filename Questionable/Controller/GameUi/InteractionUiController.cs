@@ -33,6 +33,7 @@ internal sealed class InteractionUiController : IDisposable
     private readonly IAddonLifecycle _addonLifecycle;
     private readonly AetheryteFunctions _aetheryteFunctions;
     private readonly BossModIpc _bossModIpc;
+    private readonly IChatGui _chatGui;
     private readonly IClientState _clientState;
     private readonly Configuration _configuration;
     private readonly IDataManager _dataManager;
@@ -58,6 +59,7 @@ internal sealed class InteractionUiController : IDisposable
     private List<WarpQuestion>? _warpQuestions;
     private string? _lastWarpNotUsedPrompt;
     private long _lastWarpNotUsedAt;
+    private readonly HashSet<string> _notifiedQuestBattlePrompts = [];
 
     public InteractionUiController(
         IAddonLifecycle addonLifecycle,
@@ -79,8 +81,10 @@ internal sealed class InteractionUiController : IDisposable
         BossModIpc bossModIpc,
         LifestreamIpc lifestreamIpc,
         Configuration configuration,
+        IChatGui chatGui,
         ILogger<InteractionUiController> logger)
     {
+        _chatGui = chatGui;
         _addonLifecycle = addonLifecycle;
         _dataManager = dataManager;
         _questFunctions = questFunctions;
@@ -740,7 +744,32 @@ internal sealed class InteractionUiController : IDisposable
         QuestController.QuestProgress? nextQuest = _questController.NextQuest;
         if (nextQuest != null && CheckQuestYesNo(addonSelectYesno, nextQuest, actualPrompt, checkAllSteps))
         {
+            return;
         }
+
+        NotifyUnansweredQuestBattlePrompt(actualPrompt);
+    }
+
+    /// <summary>
+    /// 任務戰鬥裡 YesAlready 被我們壓著，沒登錄的確認框只能等人按；自動化在跑時（可能沒人看著）在聊天視窗提示，同一則文字只提示一次。
+    /// </summary>
+    private void NotifyUnansweredQuestBattlePrompt(string actualPrompt)
+    {
+        if (!_territoryData.IsQuestBattleInstance(_clientState.TerritoryType) ||
+            (!_questController.IsRunning && _questController.AutomationType == QuestController.EAutomationType.Manual))
+        {
+            return;
+        }
+
+        string prompt = actualPrompt.ReplaceLineEndings(" ").Trim();
+        if (!_notifiedQuestBattlePrompts.Add(prompt))
+        {
+            return;
+        }
+
+        _logger.LogInformation("Leaving unregistered quest battle prompt to the player: '{Prompt}'", ShowControlChars(actualPrompt));
+        _chatGui.Print($"任務戰鬥中出現 Questionable 沒有登錄的確認框，請手動選擇：「{prompt}」",
+            CommandHandler.MessageTag, CommandHandler.TagColor);
     }
 
     private unsafe bool CheckQuestYesNo(AddonSelectYesno* addonSelectYesno, QuestController.QuestProgress currentQuest,
