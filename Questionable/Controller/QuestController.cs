@@ -140,6 +140,12 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     /// <summary>Auto 模式「沒有任務可做、原地等下一個」中。框架執行緒寫入，<see cref="Stop(string, bool)"/> 清除。</summary>
     private bool _autoWaitingForNextQuest;
 
+    /// <summary>
+    /// 這次登出已經做過一次 <c>StopAllDueToConditionFailed("Logged out")</c>。框架執行緒讀寫；
+    /// 只要登入中就清成 <see langword="false"/>（在 <see cref="IsQuestingStopped"/> 提早返回之前清）。
+    /// </summary>
+    private bool _logoutStopDone;
+
     /// <summary>等下一個任務的上限：等待期間 IPC IsRunning 為 true，別的外掛會以它為閘門一直暫停。</summary>
     public const int MaxAutoWaitForNextQuestSeconds = 90;
     private DateTime _autoWaitStartedAt = DateTime.MinValue;
@@ -565,6 +571,12 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             }
         }
 
+        bool loggedIn = _clientState.IsLoggedIn;
+        if (loggedIn)
+        {
+            _logoutStopDone = false;
+        }
+
         if (IsQuestingStopped)
         {
             return;
@@ -572,7 +584,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
         UpdateCurrentQuest();
 
-        if (!_clientState.IsLoggedIn)
+        if (!loggedIn)
         {
             // 🔑 這一行把「真的被登出砍掉的自動化」跟「什麼都沒在跑的登出」在記錄檔上分開。
             //    ⚠️ 條件與 Stop() 的守衛「刻意」寫成同一個：那個 if 本身就是狀態邊緣
@@ -584,7 +596,13 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                     AutomationType, _taskQueue.CurrentTaskExecutor?.CurrentTask, _taskQueue.RemainingTasks.Count());
             }
 
-            StopAllDueToConditionFailed("Logged out");
+            // 登出後每幀都停＝每幀 BeginScope、SetHighlight、對 vnavmesh 打 Path.Stop，而停完什麼都沒在動。
+            // ⇒ 剛登出那一幀停一次；之後只要有任何一樣又動起來（IPC 開跑、殘留的移動／戰鬥）就照樣再停。
+            if (!_logoutStopDone || HasWorkToStopWhileLoggedOut())
+            {
+                _logoutStopDone = true;
+                StopAllDueToConditionFailed("Logged out");
+            }
         }
         if (_condition[ConditionFlag.Unconscious])
         {
@@ -653,6 +671,17 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         CheckAutoRefreshCondition();
 
         UpdateCurrentTask();
+    }
+
+    /// <summary>登出中還有沒有東西要 <see cref="StopAllDueToConditionFailed(string)"/> 去停。只讀本機狀態、不打 IPC、不配置。</summary>
+    private bool HasWorkToStopWhileLoggedOut()
+    {
+        return IsRunning
+            || AutomationType != EAutomationType.Manual
+            || IsAutoContinuationPending
+            || _movementController.Destination != null
+            || _movementController.IsPathfinding
+            || _combatController.IsRunning;
     }
 
     private void CheckAutoRefreshCondition()
