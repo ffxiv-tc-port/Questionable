@@ -81,6 +81,8 @@ internal static class AethernetShortcut
         private bool _moving;
         private bool _teleported;
         private bool _triedMounting;
+        private EAetheryteLocation? _fallbackAetheryte;
+        private DateTime _fallbackTeleportStartedAt = DateTime.MaxValue;
 
         /// <summary>已經把傳送交給 Lifestream（之後到任務完成前，Lifestream 可能正在替我們跑）。</summary>
         internal bool LifestreamRequested => _teleported;
@@ -190,12 +192,50 @@ internal static class AethernetShortcut
                     "Aethernet shortcut not unlocked (from: {FromAetheryte}, to: {ToAetheryte}), skipping as we are already in the destination territory",
                     Task.From, Task.To);
             }
+            else if (aetheryteFunctions.IsTeleportUnlocked() &&
+                     FindFallbackAetheryte(Task.To, aetheryteData.TerritoryIds, aetheryteData.Locations,
+                         aetheryteFunctions.IsAetheryteUnlocked) is { } fallback)
+            {
+                logger.LogInformation(
+                    "都市傳送網水晶尚未開通（{From} 已開通={FromUnlocked}、{To} 已開通={ToUnlocked}），改用傳送到同一區的乙太之光 {Fallback}，之後走路過去",
+                    Task.From, aetheryteFunctions.IsAetheryteUnlocked(Task.From),
+                    Task.To, aetheryteFunctions.IsAetheryteUnlocked(Task.To), fallback);
+                _fallbackAetheryte = fallback;
+                return true;
+            }
             else
             {
                 throw new TaskException($"Aethernet shortcut not unlocked (from: {Task.From}, to: {Task.To})");
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// 目的地那一區裡、已開通的大型乙太之光，離目的地水晶最近的一座；沒有就回 null。
+        /// 只在 <see cref="Start"/> 呼叫一次，不進每幀路徑。
+        /// </summary>
+        internal static EAetheryteLocation? FindFallbackAetheryte(EAetheryteLocation to,
+            IReadOnlyDictionary<EAetheryteLocation, uint> territoryIds,
+            IReadOnlyDictionary<EAetheryteLocation, Vector3> locations,
+            Func<EAetheryteLocation, bool> isUnlocked)
+        {
+            if (!territoryIds.TryGetValue(to, out uint targetTerritory))
+            {
+                return null;
+            }
+
+            bool hasTargetPosition = locations.TryGetValue(to, out Vector3 targetPosition);
+            return territoryIds
+                .Where(x => x.Value == targetTerritory && AetheryteConverter.IsLargeAetheryte(x.Key))
+                .Select(x => x.Key)
+                .Where(isUnlocked)
+                .OrderBy(x => hasTargetPosition && locations.TryGetValue(x, out Vector3 p)
+                    ? Vector3.Distance(p, targetPosition)
+                    : float.MaxValue)
+                .ThenBy(x => (uint)x)
+                .Select(x => (EAetheryteLocation?)x)
+                .FirstOrDefault();
         }
 
         private void MoveTo()
@@ -229,6 +269,11 @@ internal static class AethernetShortcut
             if (DateTime.Now < _continueAt)
             {
                 return ETaskResult.StillRunning;
+            }
+
+            if (_fallbackAetheryte is { } fallback)
+            {
+                return UpdateFallbackTeleport(fallback);
             }
 
             if (_triedMounting)
@@ -302,6 +347,44 @@ internal static class AethernetShortcut
 
 
             return ETaskResult.TaskComplete;
+        }
+
+        /// <summary>完成條件只看「到了目的地水晶那一區」；區內剩下的路交給後面的移動工作。</summary>
+        private ETaskResult UpdateFallbackTeleport(EAetheryteLocation fallback)
+        {
+            if (_fallbackTeleportStartedAt == DateTime.MaxValue)
+            {
+                if (!aetheryteFunctions.CanTeleport(fallback))
+                {
+                    _continueAt = DateTime.Now.AddSeconds(1);
+                    return ETaskResult.StillRunning;
+                }
+
+                ProgressContext = InteractionProgressContext.FromActionUseOrDefault(() =>
+                    aetheryteFunctions.TeleportAetheryte(fallback));
+                if (ProgressContext == null)
+                {
+                    throw new TaskException($"Unable to teleport to aetheryte {fallback} (aethernet fallback)");
+                }
+
+                _fallbackTeleportStartedAt = DateTime.Now;
+                _continueAt = DateTime.Now.AddSeconds(8);
+                return ETaskResult.StillRunning;
+            }
+
+            if (clientState.TerritoryType == aetheryteData.TerritoryIds[Task.To])
+            {
+                return ETaskResult.TaskComplete;
+            }
+
+            // 傳送沒成行（Gil 不足、被打斷又沒被判成中斷）時不要無聲地永遠等下去，退回原本的停下。
+            if (DateTime.Now > _fallbackTeleportStartedAt.AddSeconds(45) &&
+                !condition[ConditionFlag.BetweenAreas] && !condition[ConditionFlag.BetweenAreas51])
+            {
+                throw new TaskException($"Aethernet fallback teleport to {fallback} did not arrive in the destination territory");
+            }
+
+            return ETaskResult.StillRunning;
         }
 
         public override bool ShouldInterruptOnDamage()
