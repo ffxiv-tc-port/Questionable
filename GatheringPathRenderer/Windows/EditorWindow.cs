@@ -33,7 +33,8 @@ internal sealed class EditorWindow : Window
 
     private readonly Dictionary<Guid, LocationOverride> _changes = [];
 
-    private IGameObject? _target;
+    // 只存 id、用的那一幀再向物件表重查：物件表的包裝會被就地改寫成別的物件，跨幀持有會靜默換人。
+    private ulong? _targetId;
     private int count;
     private bool compact = false;
     private bool unaddedVisible = true;
@@ -86,7 +87,7 @@ internal sealed class EditorWindow : Window
     {
         if (!_clientState.IsLoggedIn || _objectTable[0] == null)
         {
-            _target = null;
+            _targetId = null;
             _targetLocation = null;
             unaddedVisible = true;
             return;
@@ -95,7 +96,7 @@ internal sealed class EditorWindow : Window
         if (_objectTable[0] != null && !PlayerState.Instance()->CurrentClassJobId.InRange(16, 18))
             unaddedVisible = true;
 
-        _target = _targetManager.Target;
+        IGameObject? target = _targetManager.Target;
         var gatheringLocations = _plugin.GetLocationsInTerritory(_clientState.TerritoryType);
         var location = gatheringLocations.ToList().SelectMany(context =>
                 context.Root.Groups.SelectMany(group =>
@@ -103,29 +104,30 @@ internal sealed class EditorWindow : Window
                         .Select(location =>
                         {
                             float distance;
-                            if (_target != null)
-                                distance = Vector3.Distance(location.Position, _target.Position);
+                            if (target != null)
+                                distance = Vector3.Distance(location.Position, target.Position);
                             else
                                 distance = Vector3.Distance(location.Position, _objectTable[0]!.Position);
 
                             return new { Context = context, Node = node, Location = location, Distance = distance };
                         })
-                        .Where(location => location.Distance < (_target == null ? 3f : 0.1f)))))
+                        .Where(location => location.Distance < (target == null ? 3f : 0.1f)))))
             .MinBy(x => x.Distance);
-        if (_target != null && _target.ObjectKind != ObjectKind.GatheringPoint)
+        if (target != null && target.ObjectKind != ObjectKind.GatheringPoint)
         {
-            _target = null;
+            _targetId = null;
             _targetLocation = null;
             return;
         }
 
         if (location == null)
         {
+            _targetId = target?.GameObjectId;
             _targetLocation = null;
             return;
         }
 
-        _target ??= _objectTable
+        target ??= _objectTable
             .Where(x => x.ObjectKind == ObjectKind.GatheringPoint && x.BaseId == location.Node.DataId)
             .Select(x => new
             {
@@ -136,18 +138,22 @@ internal sealed class EditorWindow : Window
             .OrderBy(x => x.Distance)
             .Select(x => x.Object)
             .FirstOrDefault();
+        _targetId = target?.GameObjectId;
         _targetLocation = (location.Context, location.Node, location.Location);
     }
+
+    private IGameObject? ResolveTarget() => _targetId is { } id ? _objectTable.SearchById(id) : null;
 
     public unsafe override bool DrawConditions()
     {
         return (_objectTable[0] != null && PlayerState.Instance()->CurrentClassJobId.InRange(16, 18)) &&
-                _clientState.TerritoryType is not 0 && (_target != null || _targetLocation != null || unaddedVisible);
+                _clientState.TerritoryType is not 0 && (_targetId != null || _targetLocation != null || unaddedVisible);
     }
 
     public override void Draw()
     {
-        if (_target != null && _targetLocation != null)
+        IGameObject? target = ResolveTarget();
+        if (target != null && _targetLocation != null)
         {
             var context = _targetLocation.Value.Context;
             var node = _targetLocation.Value.Node;
@@ -157,7 +163,7 @@ internal sealed class EditorWindow : Window
             ImGui.Text(context.File.Name);
             ImGui.Unindent();
             ImGui.Text(
-                $"{_target.BaseId} +{node.Locations.Count - 1} / {location.InternalId.ToString()[..4]}");
+                $"{target.BaseId} +{node.Locations.Count - 1} / {location.InternalId.ToString()[..4]}");
             ImGui.Text(string.Create(CultureInfo.InvariantCulture, $"{location.Position:G}"));
 
             if (!_changes.TryGetValue(location.InternalId, out LocationOverride? locationOverride))
@@ -223,7 +229,8 @@ internal sealed class EditorWindow : Window
             ImGui.EndDisabled();
 
 
-            List<IGameObject> nodesInObjectTable = [.. _objectTable.Where(x => x.ObjectKind == ObjectKind.GatheringPoint && x.BaseId == _target.BaseId)];
+            uint targetBaseId = target.BaseId;
+            List<IGameObject> nodesInObjectTable = [.. _objectTable.Where(x => x.ObjectKind == ObjectKind.GatheringPoint && x.BaseId == targetBaseId)];
             List<IGameObject> missingLocations = [.. nodesInObjectTable.Where(x => !node.Locations.Any(y => Vector3.Distance(x.Position, y.Position) < 0.1f))];
             if (missingLocations.Count > 0)
             {
@@ -236,9 +243,9 @@ internal sealed class EditorWindow : Window
                 }
             }
         }
-        else if (_target != null)
+        else if (target != null)
         {
-            var gatheringPoint = _dataManager.GetExcelSheet<GatheringPoint>().GetRowOrDefault(_target.BaseId);
+            var gatheringPoint = _dataManager.GetExcelSheet<GatheringPoint>().GetRowOrDefault(target.BaseId);
             if (gatheringPoint == null)
                 return;
 
@@ -251,15 +258,15 @@ internal sealed class EditorWindow : Window
 
                 if (ImGui.Button("Add to closest group"))
                 {
-                    _editorCommands.AddToExistingGroup(root, _target);
+                    _editorCommands.AddToExistingGroup(root, target);
                     _plugin.Save(targetFile, root);
                 }
 
-                ImGui.BeginDisabled(root.Groups.Any(group => group.Nodes.Any(node => node.DataId == _target.BaseId)));
+                ImGui.BeginDisabled(root.Groups.Any(group => group.Nodes.Any(node => node.DataId == target.BaseId)));
                 ImGui.SameLine();
                 if (ImGui.Button("Add as new group"))
                 {
-                    _editorCommands.AddToNewGroup(root, _target);
+                    _editorCommands.AddToNewGroup(root, target);
                     _plugin.Save(targetFile, root);
                 }
 
@@ -269,7 +276,7 @@ internal sealed class EditorWindow : Window
             {
                 if (ImGui.Button($"Create location ({gatheringPoint.Value.GatheringPointBase.RowId})"))
                 {
-                    var (targetFile, root) = _editorCommands.CreateNewFile(gatheringPoint.Value, _target);
+                    var (targetFile, root) = _editorCommands.CreateNewFile(gatheringPoint.Value, target);
                     _plugin.Save(targetFile, root);
                 }
             }

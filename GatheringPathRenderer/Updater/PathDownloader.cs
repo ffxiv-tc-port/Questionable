@@ -32,8 +32,9 @@ internal sealed class PathDownloader : IDisposable
     /// <summary>
     /// 路徑資料與其清單的來源。清單端（Python 腳本）與下載端（這裡）共用同一個值。
     /// </summary>
+    // HEAD＝repo 預設分支：預設分支改名或換掉時不會變成 404。
     internal const string PathRepoBaseUrl =
-        "https://raw.githubusercontent.com/ffxiv-tc-port/Questionable/refs/heads/tc-7.20/";
+        "https://raw.githubusercontent.com/ffxiv-tc-port/Questionable/HEAD/";
 
     /// <summary>清單檔在 repo 裡的位置（「檔案相對路徑 → SHA-256 小寫十六進位」）。</summary>
     internal const string IndexRelativePath = "GatheringPathRenderer/Resources/paths_index.json";
