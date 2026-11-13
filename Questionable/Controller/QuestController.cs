@@ -1660,7 +1660,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     public void StopAllDueToConditionFailed(string label, bool needsManualAttention)
     {
         Stop(label, needsManualAttention);
-        _movementController.Stop(RunOrDefer);
+        // IPC Stop／登出／ESC 閒置時也會走到：只停自己發起的移動，不停別的插件的 vnavmesh 路徑。
+        _movementController.StopOwn(RunOrDefer);
         _combatController.Stop(label, RunOrDefer);
         _gatheringController.Stop(label);
     }

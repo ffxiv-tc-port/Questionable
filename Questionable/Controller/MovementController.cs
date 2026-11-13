@@ -182,10 +182,16 @@ internal sealed class MovementController
     public void Dispose()
     {
         // 卸載不是使用者對 vnavmesh 的操作：沒有自己發起的移動（Destination）就不打 Path.Stop，免得停掉別的插件的路徑。
+        StopOwn();
+    }
+
+    /// <summary>只停自己發起的移動；<see cref="Destination"/> 為 null 時只取消自己的尋路，不打 <c>Path.Stop</c>、不關自動前進。</summary>
+    public void StopOwn(Action<Action>? defer = null)
+    {
         bool ownsPath = Destination != null;
         if (ownsPath)
         {
-            Stop();
+            Stop(defer);
         }
         else
         {

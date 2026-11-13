@@ -173,7 +173,7 @@ internal sealed class CommandHandler : IDisposable
                 break;
 
             case "stop":
-                _movementController.Stop();
+                _movementController.StopOwn();
                 _questController.Stop("Stop command");
                 break;
 
