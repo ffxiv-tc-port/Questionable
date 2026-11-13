@@ -1318,7 +1318,17 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         //_logger.LogDebug("Clearing task (internally)");
         if (_taskQueue.CurrentTaskExecutor is IStoppableTaskExecutor stoppableTaskExecutor)
         {
-            stoppableTaskExecutor.StopNow();
+            // StopNow 會打外部插件（AutoDuty.Stop 在對方不在時擲 TaskException）；擲了也要把下面清完，
+            // 否則佇列沒清、戰鬥／採集沒停，ESC／登出路徑下一幀又進來重試。
+            try
+            {
+                stoppableTaskExecutor.StopNow();
+            }
+            catch (Exception e)
+            {
+                LogOrDefer(LogLevel.Information, e, "Stopping {Executor} failed, clearing the task queue anyway",
+                    stoppableTaskExecutor.GetType().Name);
+            }
         }
 
         _taskQueue.Reset();

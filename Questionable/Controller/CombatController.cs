@@ -664,7 +664,26 @@ internal sealed class CombatController : IDisposable
                 _logger.LogInformation("Stopping current fight");
             }
 
-            _currentFight.Module.Stop();
+            // 戰鬥模組會打外部插件（BMR／RSR）；擲了也要把下面的狀態重設做完。
+            try
+            {
+                _currentFight.Module.Stop();
+            }
+            catch (Exception e)
+            {
+                if (defer != null)
+                {
+                    defer(() =>
+                    {
+                        using IDisposable? deferredScope = _logger.BeginScope(label);
+                        _logger.LogInformation(e, "Stopping the combat module failed");
+                    });
+                }
+                else
+                {
+                    _logger.LogInformation(e, "Stopping the combat module failed");
+                }
+            }
         }
 
         _currentFight = null;
