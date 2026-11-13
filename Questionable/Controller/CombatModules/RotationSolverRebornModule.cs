@@ -19,6 +19,11 @@ internal sealed class RotationSolverRebornModule
     private readonly ILogger<RotationSolverRebornModule> _logger = logger;
     private readonly ICallGateSubscriber<string, object> _test = pluginInterface.GetIpcSubscriber<string, object>("RotationSolverReborn.Test");
 
+    /// <summary>這次戰鬥是本插件把 RSR 切到 Manual 的；卸載時只在這種情況才送 Off。</summary>
+    private bool _started;
+
+    private bool _loggedModeNotRestored;
+
     public bool CanHandleFight(CombatController.CombatData combatData)
     {
         if (_configuration.General.CombatModule != Configuration.ECombatModule.RotationSolverReborn)
@@ -41,7 +46,16 @@ internal sealed class RotationSolverRebornModule
     {
         try
         {
+            if (!_loggedModeNotRestored)
+            {
+                // RSR 沒有讀目前模式的端點 ⇒ 開始前無從記下原狀態，結束時照舊送 Off。
+                _loggedModeNotRestored = true;
+                _logger.LogInformation(
+                    "RotationSolverReborn has no IPC to read its current mode, so it is set to Off after combat instead of returning to the previous mode");
+            }
+
             _changeOperationMode.InvokeAction(StateCommandType.Manual);
+            _started = true;
             return true;
         }
         catch(IpcError e)
@@ -53,6 +67,7 @@ internal sealed class RotationSolverRebornModule
 
     public bool Stop()
     {
+        _started = false;
         if (!_changeOperationMode.HasAction)
         {
             return true;
@@ -81,7 +96,10 @@ internal sealed class RotationSolverRebornModule
 
     public void Dispose()
     {
-        Stop();
+        if (_started)
+        {
+            Stop();
+        }
     }
 
     [PublicAPI]
