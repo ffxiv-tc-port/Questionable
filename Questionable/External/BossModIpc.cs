@@ -56,8 +56,14 @@ internal sealed class BossModIpc
     /// <summary>經 BMR 的執行期覆寫端點設過值、還沒清掉；只是省掉不必要的 IPC，BMR 在本插件卸載時也會自己清。</summary>
     private volatile bool _hasTransientOverrides;
 
-    /// <summary>EnableQuestBattles 是退回 <c>/bmr cfg</c>（會存檔）開的，關的時候也要用指令寫回 false。</summary>
-    private volatile bool _questBattlesEnabledByCommand;
+    private readonly ICallGateSubscriber<List<string>, bool, List<string>> _consoleConfig =
+        pluginInterface.GetIpcSubscriber<List<string>, bool, List<string>>($"{PluginName}.Configuration");
+
+    /// <summary>
+    /// 退回 <c>/bmr cfg</c>（會存檔）寫過的欄位：鍵＝<c>型別 欄位</c>，每欄只記第一次寫之前的值（null＝讀不到）。
+    /// <see cref="RestoreSavedSettings"/> 寫回後清空。
+    /// </summary>
+    private readonly Dictionary<string, (bool Written, bool? Original)> _commandWrites = [];
 
     /// <summary>
     /// Operations whose IPC failure has already been logged; keeps per-frame or repeated
@@ -167,13 +173,12 @@ internal sealed class BossModIpc
         //_commandManager.ProcessCommand("/bmrai on");
         if (!TrySetTransientBool(KeyEnableQuestBattles, true))
         {
-            _questBattlesEnabledByCommand = true;
-            _commandManager.ProcessCommand("/bmr cfg ZoneModuleConfig EnableQuestBattles true");
+            SetSavedBool(CmdEnableQuestBattles, true);
         }
 
         if (!TrySetTransientBool(KeyClearPresetOnCombatEnd, false))
         {
-            _commandManager.ProcessCommand("/bmr cfg Autorotation ClearPresetOnCombatEnd false");
+            SetSavedBool(CmdClearPresetOnCombatEnd, false);
         }
 
         return SetPreset(passive ? EPreset.Overworld : EPreset.QuestBattle);
@@ -183,15 +188,97 @@ internal sealed class BossModIpc
     public bool DisableAi()
     {
         // 刻意不送 /bmrai off：EnableAi 從不開 BMR AI，關掉的只會是使用者或別的插件開的那個。
-        // 有覆寫端點時只撤掉自己的覆寫、BMR 回到使用者自己的設定；舊版 BMR 沒有端點才照舊寫 false。
+        // 有覆寫端點時只撤掉自己的覆寫；舊版 BMR 寫回 /bmr cfg 改之前的值，沒紀錄或讀不到原值才照舊寫 false。
         bool cleared = TryClearAllTransient();
-        if (!cleared || _questBattlesEnabledByCommand)
+        bool restored = RestoreSavedSettings();
+        if (!cleared && !restored)
         {
-            _questBattlesEnabledByCommand = false;
-            _commandManager.ProcessCommand("/bmr cfg ZoneModuleConfig EnableQuestBattles false");
+            _commandManager.ProcessCommand($"/bmr cfg {CmdEnableQuestBattles} false");
         }
 
         return ClearPreset();
+    }
+
+    private const string CmdEnableQuestBattles = "ZoneModuleConfig EnableQuestBattles";
+    private const string CmdClearPresetOnCombatEnd = "Autorotation ClearPresetOnCombatEnd";
+
+    public bool HasSavedSettingsToRestore
+    {
+        get
+        {
+            lock (_commandWrites)
+            {
+                return _commandWrites.Count > 0;
+            }
+        }
+    }
+
+    private void SetSavedBool(string typeAndField, bool value)
+    {
+        bool known;
+        lock (_commandWrites)
+        {
+            known = _commandWrites.ContainsKey(typeAndField);
+        }
+
+        if (!known)
+        {
+            bool? original = TryReadSavedBool(typeAndField);
+            if (original == null)
+            {
+                LogFallbackOnce($"ReadConfig({typeAndField})",
+                    $"Cannot read the BossMod setting {typeAndField} before changing it with /bmr cfg; it will not be restored to the previous value");
+            }
+
+            lock (_commandWrites)
+            {
+                _commandWrites.TryAdd(typeAndField, (value, original));
+            }
+        }
+
+        _commandManager.ProcessCommand($"/bmr cfg {typeAndField} {(value ? "true" : "false")}");
+    }
+
+    /// <returns>null＝端點不存在、型別不符或回的不是 true／false。</returns>
+    private bool? TryReadSavedBool(string typeAndField)
+    {
+        List<string>? result = IpcInvoke.SafeFunc<List<string>?>(
+            () => _consoleConfig.InvokeFunc([..typeAndField.Split(' ')], false), fallback: null);
+        return result is [var text] && bool.TryParse(text, out bool value) ? value : null;
+    }
+
+    /// <summary>
+    /// 把 <c>/bmr cfg</c> 退路寫過的欄位寫回寫之前的值；原值相同就不寫。讀不到原值時照舊行為：
+    /// EnableQuestBattles 寫 false、ClearPresetOnCombatEnd 不動。冪等。
+    /// </summary>
+    /// <returns><c>true</c>＝EnableQuestBattles 有紀錄、已在這裡處理（呼叫端不必再照舊寫 false）。</returns>
+    public bool RestoreSavedSettings()
+    {
+        KeyValuePair<string, (bool Written, bool? Original)>[] writes;
+        lock (_commandWrites)
+        {
+            if (_commandWrites.Count == 0)
+            {
+                return false;
+            }
+
+            writes = [.._commandWrites];
+            _commandWrites.Clear();
+        }
+
+        bool questBattlesHandled = false;
+        foreach ((string typeAndField, (bool written, bool? original)) in writes)
+        {
+            questBattlesHandled |= typeAndField == CmdEnableQuestBattles;
+            bool? restoreTo = original ?? (typeAndField == CmdEnableQuestBattles ? false : null);
+            if (restoreTo is bool target && target != written)
+            {
+                _logger.LogInformation("Restoring the BossMod setting {Setting} to {Value}", typeAndField, target);
+                _commandManager.ProcessCommand($"/bmr cfg {typeAndField} {(target ? "true" : "false")}");
+            }
+        }
+
+        return questBattlesHandled;
     }
 
     /// <summary>撤掉 Questionable 在 BMR 設的執行期覆寫；沒設過就不呼叫。任何執行緒皆可（BMR 端自帶鎖）。</summary>

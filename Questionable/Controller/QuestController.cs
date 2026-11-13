@@ -97,6 +97,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
     private readonly TaskCreator _taskCreator;
     private readonly TataruPraiseIpc _tataruPraiseIpc;
     private readonly BossModIpc _bossModIpc;
+    private readonly AutoDutyIpc _autoDutyIpc;
     private readonly LifestreamIpc _lifestreamIpc;
     private readonly AlliedDailyRouteEstimator _alliedDailyRouteEstimator;
     private readonly IToastGui _toastGui;
@@ -179,7 +180,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         TataruPraiseIpc tataruPraiseIpc,
         BossModIpc bossModIpc,
         LifestreamIpc lifestreamIpc,
-        AlliedDailyRouteEstimator alliedDailyRouteEstimator)
+        AlliedDailyRouteEstimator alliedDailyRouteEstimator,
+        AutoDutyIpc autoDutyIpc)
         : base(chatGui, condition, serviceProvider, interruptHandler, dataManager, logger)
     {
         _clientState = clientState;
@@ -203,6 +205,7 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         _alliedSocietyQuestFunctions = alliedSocietyQuestFunctions;
         _tataruPraiseIpc = tataruPraiseIpc;
         _bossModIpc = bossModIpc;
+        _autoDutyIpc = autoDutyIpc;
         _lifestreamIpc = lifestreamIpc;
         _alliedDailyRouteEstimator = alliedDailyRouteEstimator;
         _logger = logger;
@@ -1417,6 +1420,48 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                 //    Questionable 的路徑就是死鎖。純通知、沒有回傳值 ⇒ 延到出鎖之後再打。
                 RunOrDefer(() => _tataruPraiseIpc.NotifyNeedHelp(label));
             }
+        }
+
+        // 寫在上面的 if 外：自動化可能已自己轉回手動，退路改過的別人存檔設定仍要在停止時寫回。
+        if (_autoDutyIpc.HasSavedSettingsToRestore || _bossModIpc.HasSavedSettingsToRestore)
+        {
+            RunOrDefer(RestoreOtherPluginsSavedSettings);
+        }
+    }
+
+    private void RestoreOtherPluginsSavedSettings()
+    {
+        _autoDutyIpc.RestoreSavedSettings();
+        _bossModIpc.RestoreSavedSettings();
+    }
+
+    /// <summary>
+    /// 卸載時走與 IPC <c>Stop</c> 相同的停止與還原（只停自己發起的）。遊戲關閉中或不在框架執行緒時不做，只記警告。
+    /// </summary>
+    private void StopOwnWorkOnUnload()
+    {
+        bool hasWork = HasWorkToStopWhileLoggedOut() || _autoDutyIpc.HasSavedSettingsToRestore ||
+                       _bossModIpc.HasSavedSettingsToRestore;
+        if (!hasWork)
+        {
+            return;
+        }
+
+        if (_framework.IsFrameworkUnloading || !_framework.IsInFrameworkUpdateThread)
+        {
+            _logger.LogWarning(
+                "Unloading while questing is active (game closing: {GameClosing}); not stopping it or restoring other plugins' settings",
+                _framework.IsFrameworkUnloading);
+            return;
+        }
+
+        try
+        {
+            StopAllDueToConditionFailed("Unload");
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning(e, "Stopping questing on unload failed");
         }
     }
 
@@ -3077,6 +3122,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
     public override void Dispose()
     {
+        // 要在退訂之前：停止路徑會用到的服務都是本類別的建構相依，容器保證它們比本類別晚釋放。
+        StopOwnWorkOnUnload();
         _clientState.Logout -= ClearRedeemAttemptsOnLogout;
         _toastGui.ErrorToast -= OnErrorToast;
         _toastGui.Toast -= OnNormalToast;

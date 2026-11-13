@@ -31,6 +31,7 @@ internal sealed class AutoDutyIpc
     private readonly Configuration _configuration = configuration;
     private readonly ICallGateSubscriber<uint, bool> _contentHasPath = pluginInterface.GetIpcSubscriber<uint, bool>("AutoDuty.ContentHasPath");
     private readonly IFramework _framework = framework;
+    private readonly ICallGateSubscriber<string, string> _getConfig = pluginInterface.GetIpcSubscriber<string, string>("AutoDuty.GetConfig");
     private readonly ICallGateSubscriber<bool> _isStopped = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.IsStopped");
     private readonly ILogger<AutoDutyIpc> _logger = logger;
     private readonly ICallGateSubscriber<bool> _popConfigOverrides = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.PopConfigOverrides");
@@ -39,6 +40,22 @@ internal sealed class AutoDutyIpc
     private readonly ICallGateSubscriber<string, string, object> _setConfig = pluginInterface.GetIpcSubscriber<string, string, object>("AutoDuty.SetConfig");
     private readonly ICallGateSubscriber<object> _stop = pluginInterface.GetIpcSubscriber<object>("AutoDuty.Stop");
     private readonly TerritoryData _territoryData = territoryData;
+
+    /// <summary>經 <c>SetConfig</c> 退路改掉的存檔欄位 → 改之前的值；每欄只記第一次，<see cref="RestoreSavedSettings"/> 寫回後清空。</summary>
+    private readonly Dictionary<string, string> _savedSettingOriginals = [];
+
+    private bool _loggedUnreadableOriginal;
+
+    public bool HasSavedSettingsToRestore
+    {
+        get
+        {
+            lock (_savedSettingOriginals)
+            {
+                return _savedSettingOriginals.Count > 0;
+            }
+        }
+    }
 
     public bool IsConfiguredToRunContent(DutyOptions? dutyOptions)
     {
@@ -134,8 +151,8 @@ internal sealed class AutoDutyIpc
         {
             if (!overridden)
             {
-                _setConfig.InvokeAction("Unsynced", unsynced);
-                _setConfig.InvokeAction("dutyModeEnum", dutyModeName);
+                SetSavedConfig("Unsynced", unsynced);
+                SetSavedConfig("dutyModeEnum", dutyModeName);
             }
 
             _run.InvokeAction(cfcData.TerritoryId, LoopsPerRun, !_configuration.Advanced.DisableAutoDutyBareMode);
@@ -175,6 +192,63 @@ internal sealed class AutoDutyIpc
             "AutoDuty {Reason} the temporary config overrides, falling back to AutoDuty.SetConfig (this changes the saved AutoDuty settings)",
             accepted == null ? "cannot take" : "rejected");
         return false;
+    }
+
+    private void SetSavedConfig(string name, string value)
+    {
+        bool known;
+        lock (_savedSettingOriginals)
+        {
+            known = _savedSettingOriginals.ContainsKey(name);
+        }
+
+        if (!known)
+        {
+            string original = IpcInvoke.SafeFunc(() => _getConfig.InvokeFunc(name), fallback: string.Empty, _logger,
+                "Unable to read the AutoDuty setting {Name} before changing it", name);
+            if (string.IsNullOrEmpty(original))
+            {
+                // 讀不到原值＝維持原本的行為（改了不還原），只記一次。
+                if (!_loggedUnreadableOriginal)
+                {
+                    _loggedUnreadableOriginal = true;
+                    _logger.LogInformation(
+                        "Cannot read the AutoDuty setting {Name} before changing it, it will not be restored when questing stops", name);
+                }
+            }
+            else if (!string.Equals(original, value, StringComparison.OrdinalIgnoreCase))
+            {
+                lock (_savedSettingOriginals)
+                {
+                    _savedSettingOriginals.TryAdd(name, original);
+                }
+            }
+        }
+
+        _setConfig.InvokeAction(name, value);
+    }
+
+    /// <summary>把 <c>SetConfig</c> 退路改過的 AutoDuty 存檔欄位寫回原值；冪等，沒改過就不呼叫。</summary>
+    public void RestoreSavedSettings()
+    {
+        KeyValuePair<string, string>[] originals;
+        lock (_savedSettingOriginals)
+        {
+            if (_savedSettingOriginals.Count == 0)
+            {
+                return;
+            }
+
+            originals = [.._savedSettingOriginals];
+            _savedSettingOriginals.Clear();
+        }
+
+        foreach ((string name, string original) in originals)
+        {
+            _logger.LogInformation("Restoring the AutoDuty setting {Name} to {Value}", name, original);
+            IpcInvoke.SafeAction(() => _setConfig.InvokeAction(name, original), _logger,
+                "Unable to restore the AutoDuty setting {Name} to {Value}", name, original);
+        }
     }
 
     /// <param name="runReturned"><c>false</c> 表示呼叫 <c>Run</c> 本身就擲了例外。</param>
