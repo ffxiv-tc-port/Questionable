@@ -24,6 +24,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Quest = Questionable.Model.Quest;
 
 namespace Questionable.Controller.GameUi;
@@ -39,6 +40,9 @@ internal sealed class InteractionUiController : IDisposable
     private readonly IDataManager _dataManager;
     private readonly ExcelFunctions _excelFunctions;
     private readonly IGameGuiAdapter _gameGui;
+    private readonly IFramework _framework;
+    private readonly CancellationTokenSource _unloadCts = new();
+    private volatile bool _disposed;
     private readonly GatheringPointRegistry _gatheringPointRegistry;
     private readonly Regex _hqTradeRegex;
     private readonly LifestreamIpc _lifestreamIpc;
@@ -82,6 +86,7 @@ internal sealed class InteractionUiController : IDisposable
         LifestreamIpc lifestreamIpc,
         Configuration configuration,
         IChatGui chatGui,
+        IFramework framework,
         ILogger<InteractionUiController> logger)
     {
         _chatGui = chatGui;
@@ -96,6 +101,7 @@ internal sealed class InteractionUiController : IDisposable
         _questData = questData;
         _territoryData = territoryData;
         _gameGui = gameGui;
+        _framework = framework;
         _targetManager = targetManager;
         _clientState = clientState;
         //_playerState = playerState;
@@ -119,12 +125,27 @@ internal sealed class InteractionUiController : IDisposable
         _addonLifecycle.RegisterListener(AddonEvent.PostSetup, "PointMenu", PointMenuPostSetup);
         _addonLifecycle.RegisterListener(AddonEvent.PostSetup, "HousingSelectBlock", HousingSelectBlockPostSetup);
 
-        unsafe
+        // 建構子在載入工作執行緒上，碰原生視窗要排到框架執行緒；卸載時還沒輪到就取消。
+        _ = _framework.Run(CloseRhythmActionIfOpen, _unloadCts.Token);
+    }
+
+    private unsafe void CloseRhythmActionIfOpen()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
         {
             if (_gameGui.TryGetAddonByName("RhythmAction", out AtkUnitBase* addon))
             {
-                addon->Close(true);
+                AddonPressGuard.PressClose("RhythmAction", addon);
             }
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning(e, "Could not close RhythmAction after loading");
         }
     }
 
@@ -134,6 +155,9 @@ internal sealed class InteractionUiController : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        _unloadCts.Cancel();
+        _unloadCts.Dispose();
         _addonLifecycle.UnregisterListener(AddonEvent.PostSetup, "HousingSelectBlock", HousingSelectBlockPostSetup);
         _addonLifecycle.UnregisterListener(AddonEvent.PostSetup, "PointMenu", PointMenuPostSetup);
         _addonLifecycle.UnregisterListener(AddonEvent.PostSetup, "DifficultySelectYesNo", DifficultySelectYesNoPostSetup);
