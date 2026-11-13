@@ -1,6 +1,7 @@
 ﻿using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using ECommons.ExcelServices;
+using Lumina.Excel;
 using Lumina.Excel.Sheets;
 using Questionable.Model;
 using Questionable.Model.Questing;
@@ -89,11 +90,14 @@ internal sealed class QuestData
     public QuestData(IDataManager dataManager, ClassJobUtils classJobUtils, IPluginLog? pluginLog = null)
     {
         _pluginLog = pluginLog;
+
+        // 本建構子裡寫死的列號／任務編號查不到時只略過那一項並記 Warning，不讓插件載入失敗（改版後表可能缺列）。
+        ExcelSheet<Quest> questSheet = dataManager.GetExcelSheet<Quest>();
         JournalGenreOverrides journalGenreOverrides = new()
         {
-            ARelicRebornQuests = dataManager.GetExcelSheet<Quest>().GetRow(65742).JournalGenre.RowId,
-            RadzAtHanSideQuests = dataManager.GetExcelSheet<Quest>().GetRow(69805).JournalGenre.RowId,
-            ThavnairSideQuests = dataManager.GetExcelSheet<Quest>().GetRow(70025).JournalGenre.RowId
+            ARelicRebornQuests = GetJournalGenreOverride(questSheet, 65742),
+            RadzAtHanSideQuests = GetJournalGenreOverride(questSheet, 69805),
+            ThavnairSideQuests = GetJournalGenreOverride(questSheet, 70025)
         };
 
         Dictionary<uint, uint> questChapters =
@@ -104,7 +108,12 @@ internal sealed class QuestData
         Dictionary<uint, byte> startingCities = [];
         for(byte redoChapter = 1; redoChapter <= 3; ++redoChapter)
         {
-            QuestRedo questRedo = dataManager.GetExcelSheet<QuestRedo>().GetRow(redoChapter);
+            if (dataManager.GetExcelSheet<QuestRedo>().GetRowOrDefault(redoChapter) is not { } questRedo)
+            {
+                WarnMissing($"QuestRedo 第 {redoChapter} 列", "該主城的起始任務不標記起始城市");
+                continue;
+            }
+
             foreach(QuestRedo.QuestRedoParamStruct quest in questRedo.QuestRedoParam.Where(x => x.Quest.IsValid))
             {
                 startingCities[quest.Quest.RowId] = redoChapter;
@@ -273,21 +282,21 @@ internal sealed class QuestData
             [107, 111, 112, 122, 663, 475, 472, 476, 470, 473, 474, 477, 486, 478, 479, 59, 400, 401, 693, 405];
         foreach(ushort questId in limsaSideQuests)
         {
-            ((QuestInfo)_quests[new QuestId(questId)]).StartingCity = 1;
+            SetStartingCity(questId, 1);
         }
 
         ushort[] gridaniaQuests =
             [39, 1, 32, 34, 37, 172, 127, 130, 60, 220, 378];
         foreach(ushort questId in gridaniaQuests)
         {
-            ((QuestInfo)_quests[new QuestId(questId)]).StartingCity = 2;
+            SetStartingCity(questId, 2);
         }
 
         ushort[] uldahSideQuests =
             [594, 389, 390, 321, 304, 322, 388, 308, 326, 58, 687, 341, 504, 531, 506, 530, 573, 342, 505];
         foreach(ushort questId in uldahSideQuests)
         {
-            ((QuestInfo)_quests[new QuestId(questId)]).StartingCity = 3;
+            SetStartingCity(questId, 3);
         }
 
         // follow-up quests to picking a GC
@@ -335,9 +344,42 @@ internal sealed class QuestData
         QuestId[] questIds = [new(683), new(684), new(685)];
         foreach(QuestId questId in questIds)
         {
-            QuestInfo quest = (QuestInfo)_quests[questId];
+            if (!_quests.TryGetValue(questId, out IQuestInfo? info) || info is not QuestInfo quest)
+            {
+                WarnMissing($"任務 {questId.Value}", "不加上大國防聯軍後續任務的互斥鎖");
+                continue;
+            }
+
             quest.AddQuestLocks(EQuestJoin.AtLeastOne, questIds.Where(x => x != questId).ToArray());
         }
+    }
+
+    private uint? GetJournalGenreOverride(ExcelSheet<Quest> questSheet, uint rowId)
+    {
+        if (questSheet.GetRowOrDefault(rowId) is { } quest)
+        {
+            return quest.JournalGenre.RowId;
+        }
+
+        WarnMissing($"Quest 第 {rowId} 列", "對應任務改用自己的日誌分類");
+        return null;
+    }
+
+    private void SetStartingCity(ushort questId, byte startingCity)
+    {
+        if (_quests.TryGetValue(new QuestId(questId), out IQuestInfo? info) && info is QuestInfo questInfo)
+        {
+            questInfo.StartingCity = startingCity;
+        }
+        else
+        {
+            WarnMissing($"任務 {questId}", "不標記起始城市");
+        }
+    }
+
+    private void WarnMissing(string what, string consequence)
+    {
+        _pluginLog?.Warning("任務資料缺少寫死引用的 {What}，{Consequence}（遊戲資料可能已改版）", what, consequence);
     }
 
     public IQuestInfo GetQuestInfo(ElementId elementId)

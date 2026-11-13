@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Questionable.Model.Common;
 using Questionable.Model.Questing;
 using System;
+using System.Threading;
 using Action = Lumina.Excel.Sheets.Action;
 
 namespace Questionable.Functions;
@@ -22,6 +23,8 @@ internal sealed unsafe class AetheryteFunctions
     private readonly ILogger<AetheryteFunctions> _logger = logger;
 
     private readonly IServiceProvider _serviceProvider = serviceProvider;
+
+    private int _teleportRowMissingLogged;
 
     public DateTime ReturnRequestedAt { get; set; } = DateTime.MinValue;
 
@@ -53,13 +56,20 @@ internal sealed unsafe class AetheryteFunctions
         return ActionManager.Instance()->GetActionStatus(ActionType.Action, TeleportAction) == 0;
     }
 
+    /// <remarks>Action 表缺「傳送」那一列時當成已解鎖（實際上幾乎人人都有），只記一次 Warning。</remarks>
     public bool IsTeleportUnlocked()
     {
-        uint unlockLink = _dataManager.GetExcelSheet<Action>()
-            .GetRow(5)
-            .UnlockLink
-            .RowId;
-        return UIState.Instance()->IsUnlockLinkUnlocked(unlockLink);
+        if (_dataManager.GetExcelSheet<Action>().GetRowOrDefault(TeleportAction) is not { } teleport)
+        {
+            if (Interlocked.Exchange(ref _teleportRowMissingLogged, 1) == 0)
+            {
+                _logger.LogWarning("Action 表缺少傳送（第 {Row} 列），不檢查傳送是否已解鎖（遊戲資料可能已改版）", TeleportAction);
+            }
+
+            return true;
+        }
+
+        return UIState.Instance()->IsUnlockLinkUnlocked(teleport.UnlockLink.RowId);
     }
 
     public bool TeleportAetheryte(uint aetheryteId)

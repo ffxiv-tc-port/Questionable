@@ -60,9 +60,9 @@ internal sealed class QuestInfo : IQuestInfo
 
         ValueTuple<uint?, ushort?> genreAndSortKey = QuestId.Value switch
         {
-            >= 1119 and <= 1127 or 1579 => (journalGenreOverrides.ARelicRebornQuests, 0),
-            >= 4196 and <= 4209 => (journalGenreOverrides.ThavnairSideQuests, null),
-            4173 => (journalGenreOverrides.RadzAtHanSideQuests, null),
+            >= 1119 and <= 1127 or 1579 when journalGenreOverrides.ARelicRebornQuests is { } arr => (arr, 0),
+            >= 4196 and <= 4209 when journalGenreOverrides.ThavnairSideQuests is { } thavnair => (thavnair, null),
+            4173 when journalGenreOverrides.RadzAtHanSideQuests is { } radzAtHan => (radzAtHan, null),
             var _ => (quest.JournalGenre.ValueNullable?.RowId, null)
         };
         JournalGenre = genreAndSortKey.Item1;

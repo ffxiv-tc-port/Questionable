@@ -8,36 +8,32 @@ namespace Questionable.Data;
 
 internal sealed class JournalData
 {
-    public JournalData(IDataManager dataManager, QuestData questData)
+    private readonly IPluginLog? _pluginLog;
+
+    public JournalData(IDataManager dataManager, QuestData questData, IPluginLog? pluginLog = null)
     {
+        _pluginLog = pluginLog;
         List<Genre> genres = dataManager.GetExcelSheet<JournalGenre>()
             .Where(x => x.RowId > 0 && x.Icon > 0)
             .Select(x => new Genre(x, questData.GetAllByJournalGenre(x.RowId)))
             .ToList();
 
-        QuestRedo limsaStart = dataManager.GetExcelSheet<QuestRedo>().GetRow(1);
-        QuestRedo gridaniaStart = dataManager.GetExcelSheet<QuestRedo>().GetRow(2);
-        QuestRedo uldahStart = dataManager.GetExcelSheet<QuestRedo>().GetRow(3);
         Genre genreLimsa = new(uint.MaxValue - 3, "Starting in Limsa Lominsa", 1,
-            new uint[] { 108, 109 }.Concat(limsaStart.QuestRedoParam.Select(x => x.Quest.RowId))
-                .Where(x => x != 0)
-                .Select(x => questData.GetQuestInfo(QuestId.FromRowId(x)))
-                .ToList());
+            StartingCityQuests(dataManager, questData, 1, [108, 109]));
         Genre genreGridania = new(uint.MaxValue - 2, "Starting in Gridania", 1,
-            new uint[] { 85, 123, 124 }.Concat(gridaniaStart.QuestRedoParam.Select(x => x.Quest.RowId))
-                .Where(x => x != 0)
-                .Select(x => questData.GetQuestInfo(QuestId.FromRowId(x)))
-                .ToList());
+            StartingCityQuests(dataManager, questData, 2, [85, 123, 124]));
         Genre genreUldah = new(uint.MaxValue - 1, "Starting in Ul'dah", 1,
-            new uint[] { 568, 569, 570 }.Concat(uldahStart.QuestRedoParam.Select(x => x.Quest.RowId))
-                .Where(x => x != 0)
-                .Select(x => questData.GetQuestInfo(QuestId.FromRowId(x)))
-                .ToList());
+            StartingCityQuests(dataManager, questData, 3, [568, 569, 570]));
         genres.InsertRange(0, [genreLimsa, genreGridania, genreUldah]);
-        genres.Single(x => x.Id == 1)
-            .Quests
-            .RemoveAll(x =>
+        if (genres.SingleOrDefault(x => x.Id == 1) is { } firstGenre)
+        {
+            firstGenre.Quests.RemoveAll(x =>
                 genreLimsa.Quests.Contains(x) || genreGridania.Quests.Contains(x) || genreUldah.Quests.Contains(x));
+        }
+        else
+        {
+            _pluginLog?.Warning("任務日誌缺少 JournalGenre 第 1 列，起始任務不從原分類移除（遊戲資料可能已改版）");
+        }
 
         Genres = genres.ToList();
         Categories = dataManager.GetExcelSheet<JournalCategory>()
@@ -47,6 +43,36 @@ internal sealed class JournalData
         Sections = dataManager.GetExcelSheet<JournalSection>()
             .Select(x => new Section(x, Categories.Where(y => y.SectionId == x.RowId).ToList()))
             .ToList();
+    }
+
+    /// <summary>寫死的起始任務＋QuestRedo 該列列出的任務；缺列／不在任務資料裡的略過並記 Warning。</summary>
+    private List<IQuestInfo> StartingCityQuests(IDataManager dataManager, QuestData questData, uint redoRow,
+        uint[] fixedQuestIds)
+    {
+        IEnumerable<uint> rowIds = fixedQuestIds;
+        if (dataManager.GetExcelSheet<QuestRedo>().GetRowOrDefault(redoRow) is { } questRedo)
+        {
+            rowIds = rowIds.Concat(questRedo.QuestRedoParam.Select(x => x.Quest.RowId));
+        }
+        else
+        {
+            _pluginLog?.Warning("任務日誌缺少 QuestRedo 第 {Row} 列，起始任務分類只列寫死的任務（遊戲資料可能已改版）", redoRow);
+        }
+
+        List<IQuestInfo> result = [];
+        foreach(uint rowId in rowIds.Where(x => x != 0))
+        {
+            if (questData.TryGetQuestInfo(QuestId.FromRowId(rowId), out IQuestInfo? questInfo))
+            {
+                result.Add(questInfo);
+            }
+            else
+            {
+                _pluginLog?.Warning("任務日誌的起始任務 {RowId} 不在任務資料裡，略過（遊戲資料可能已改版）", rowId);
+            }
+        }
+
+        return result;
     }
 
     public List<Genre> Genres { get; }
