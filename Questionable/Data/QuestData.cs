@@ -152,6 +152,9 @@ internal sealed class QuestData
         _knownAlliedSocieties = quests.Select(x => x.QuestId).OfType<AlliedSocietyDailyId>()
             .Select(x => x.AlliedSociety).ToHashSet();
 
+        AddPreviousQuest(new(1091), new(343)); // ifrit
+        AddPreviousQuest(new(1092), new(857)); // titan
+        AddPreviousQuest(new(1095), new(519)); // garuda
         AddPreviousQuest(new(2898), new(2922));
         AddPreviousQuest(new(5008), new(4933));
         AddPreviousQuest(new(5012), new(4959));
