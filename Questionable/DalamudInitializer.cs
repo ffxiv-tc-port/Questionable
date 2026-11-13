@@ -118,7 +118,7 @@ internal sealed class DalamudInitializer : IDisposable
         //    「還在不在尋路／移動」，現讀 vnavmesh 的 IPC 等於在我們每幀都會拿的鎖裡面跑別的外掛的碼，
         //    所以這裡每幀先取樣一次、鎖內只讀快照。移到 _questController.Update() 後面只會退化成
         //    「晚一幀」，仍然安全。
-        _movementController.RefreshNavmeshSnapshot();
+        _movementController.RefreshNavmeshSnapshot(_questController.IsQuestingStopped);
 
         _partyWatchDog.Update();
         _questController.Update();

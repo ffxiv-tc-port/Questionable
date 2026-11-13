@@ -161,8 +161,18 @@ internal sealed class MovementController
     /// 🔴 <b>刻意不擲例外</b>：它排在 <c>_questController.Update()</c> 之前，而
     /// <c>DalamudInitializer.FrameworkUpdate</c> 裡任何一支擲例外都會讓它之後的程式碼當幀不執行。
     /// </remarks>
-    public void RefreshNavmeshSnapshot()
+    /// <param name="questingStopped">
+    /// 任務引擎停著（該幀 <c>QuestController.Update</c> 提早返回、不讀快照）且沒有自己發起的移動時不打 IPC，快照記成沒在跑。
+    /// </param>
+    public void RefreshNavmeshSnapshot(bool questingStopped)
     {
+        if (questingStopped && Destination == null)
+        {
+            _pathRunningSnapshot = false;
+            _pathfindingSnapshot = IsPathfinding;
+            return;
+        }
+
         try
         {
             _pathRunningSnapshot = IsPathRunning;
@@ -290,7 +300,7 @@ internal sealed class MovementController
         if (serviceProvider.GetRequiredService<QuestController>().IsQuestingStopped)
             return;
 
-        if (IsPathRunning && Destination != null)
+        if (Destination != null && IsPathRunning)
         {
             if (gameFunctions.IsLoadingScreenVisible())
             {
