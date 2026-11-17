@@ -112,7 +112,8 @@ public static class Utils
                 Culture = CultureInfo.InvariantCulture,
                 OutputFormat = OutputFormat.List,
             });
-            if (evaluationResult.HasErrors)
+            // HasErrors 只看根節點；List 輸出的巢狀錯誤在 Details，要用 IsValid 才看得到
+            if (!evaluationResult.IsValid)
             {
                 var error = Diagnostic.Create(invalidJson,
                     null,
