@@ -1,8 +1,4 @@
 <Project>
-    <PropertyGroup Condition="$(MSBuildProjectName) != 'GatheringPathRenderer'">
-        <Version>15.277.7.0</Version>
-    </PropertyGroup>
-
     <PropertyGroup>
         <NoWarn>$(NoWarn);MSB3277;CA1506</NoWarn>
         <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277;CA1506</MSBuildWarningsAsMessages>
