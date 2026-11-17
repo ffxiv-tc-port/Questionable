@@ -1,5 +1,6 @@
 ﻿using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller.Steps.Common;
 using Questionable.Controller.Steps.Movement;
@@ -101,6 +102,21 @@ internal static class AetheryteShortcut
             return ETaskResult.StillRunning;
         }
 
+        /// <summary>
+        /// 與步驟的 <c>StepIf.Item</c> 同義：NotInInventory=false＝身上已有就略過傳送。
+        /// 傳送工作排在略過步驟的檢查之前，所以只靠 StepIf 會先白傳送一趟。背包讀不到時回 false（照常傳送）。
+        /// </summary>
+        private static unsafe bool MatchesItemCondition(SkipItemConditions itemCondition, uint itemId)
+        {
+            InventoryManager* inventoryManager = InventoryManager.Instance();
+            if (inventoryManager == null)
+                return false;
+
+            int itemCount = inventoryManager->GetInventoryItemCount(itemId, false, false)
+                            + inventoryManager->GetInventoryItemCount(itemId, true, false);
+            return itemCondition.NotInInventory ? itemCount == 0 : itemCount > 0;
+        }
+
         private bool ShouldSkipTeleport()
         {
             uint territoryType = clientState.TerritoryType;
@@ -177,6 +193,14 @@ internal static class AetheryteShortcut
                             logger.LogInformation("Skipping aetheryte shortcut, as we're not near the position");
                             return true;
                         }
+                    }
+
+                    if (skipConditions.Item is { } itemCondition && Task.Step.ItemId is { } itemId &&
+                        MatchesItemCondition(itemCondition, itemId))
+                    {
+                        logger.LogInformation("Skipping aetheryte shortcut, item condition (NotInInventory={NotInInventory}) matches for itemId {ItemId}",
+                            itemCondition.NotInInventory, itemId);
+                        return true;
                     }
 
                     if (skipConditions.ExtraCondition != null && skipConditions.ExtraCondition != EExtraSkipCondition.None &&

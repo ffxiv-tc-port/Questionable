@@ -450,6 +450,15 @@
                   ],
                   "additionalProperties": false
                 },
+                "Item": {
+                  "type": "object",
+                  "properties": {
+                    "NotInInventory": {
+                      "type": "boolean",
+                      "description": "Skip this aetheryte teleport if the item (step ItemId) is NOT in inventory; false = skip if it IS in inventory."
+                    }
+                  }
+                },
                 "ExtraCondition": {
                   "type": "string",
                   "enum": [
