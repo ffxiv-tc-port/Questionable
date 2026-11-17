@@ -267,6 +267,7 @@ internal sealed class AetheryteData
                 { EAetheryteLocation.TuliyollalVollokShoonsa, new(-99.13794f, 100.72473f, -222.03406f) },
                 { EAetheryteLocation.TuliyollalWachumeqimeqi, new(166.27747f, -17.990417f, 38.742676f) },
                 { EAetheryteLocation.TuliyollalBrightploomPost, new(71.7937f, 47.074097f, -333.21124f) },
+                { EAetheryteLocation.TuliyollalPhantomVillage, new(43.22075f, 0.019997219f, -1.406158f) },
 
                 { EAetheryteLocation.SolutionNine, new(-0.015319824f, 8.987488f, -0.015319824f) },
                 { EAetheryteLocation.SolutionNineInformationCenter, new(-30.441833f, -6.0579224f, 209.3385f) },

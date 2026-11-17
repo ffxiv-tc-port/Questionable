@@ -87,8 +87,24 @@ internal static class AethernetShortcut
         /// <summary>已經把傳送交給 Lifestream（之後到任務完成前，Lifestream 可能正在替我們跑）。</summary>
         internal bool LifestreamRequested => _teleported;
 
+        /// <summary>
+        /// 捷徑兩端有一端不在本版遊戲的 Aetheryte 表裡（例：台服 7.3 沒有蜃景鎮 Phantom Village 的水晶）＝這條捷徑不存在。
+        /// 照沒有捷徑處理（略過），不往下查表擲 KeyNotFoundException、也不拿不存在的編號去問遊戲解鎖狀態。
+        /// </summary>
+        internal static bool IsUndefinedInGameData(EAetheryteLocation from, EAetheryteLocation to,
+            IReadOnlyDictionary<EAetheryteLocation, uint> territoryIds)
+            => !territoryIds.ContainsKey(from) || !territoryIds.ContainsKey(to);
+
         protected override bool Start()
         {
+            if (IsUndefinedInGameData(Task.From, Task.To, aetheryteData.TerritoryIds))
+            {
+                logger.LogInformation(
+                    "本版遊戲資料沒有都市傳送網捷徑 {From} -> {To} 的其中一端，略過這段捷徑",
+                    Task.From, Task.To);
+                return false;
+            }
+
             if (!Task.SkipConditions.Never)
             {
                 if (Task.SkipConditions.InSameTerritory &&
