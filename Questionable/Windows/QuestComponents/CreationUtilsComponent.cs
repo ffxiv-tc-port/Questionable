@@ -71,6 +71,22 @@ internal sealed class CreationUtilsComponent
     private readonly ITargetManager _targetManager = targetManager;
     private readonly TerritoryData _territoryData = territoryData;
 
+    // 每幀都畫：ToIconString() 與區域名稱的 string.Create 每次都 new 一個字串。
+    private static readonly string BotanistSproutIcon = SeIconChar.BotanistSprout.ToIconString();
+    private (uint TerritoryId, string Text)? _territoryNameAndId;
+
+    /// <summary>同 <see cref="TerritoryData.GetNameAndId"/>（名稱表載入後不變），區域沒換就沿用上一次的字串。</summary>
+    private string GetTerritoryNameAndId(uint territoryId)
+    {
+        if (_territoryNameAndId is not { } cached || cached.TerritoryId != territoryId)
+        {
+            cached = (territoryId, _territoryData.GetNameAndId(territoryId));
+            _territoryNameAndId = cached;
+        }
+
+        return cached.Text;
+    }
+
     public void Draw()
     {
         if (_objectTable[0] == null)
@@ -78,13 +94,12 @@ internal sealed class CreationUtilsComponent
             return;
         }
 
-        string territoryName = _territoryData.GetNameAndId(_clientState.TerritoryType);
-        ImGui.Text(territoryName);
+        ImGui.Text(GetTerritoryNameAndId(_clientState.TerritoryType));
 
         if (_gameFunctions.IsFlyingUnlockedInCurrentZone())
         {
             ImGui.SameLine();
-            ImGui.Text(SeIconChar.BotanistSprout.ToIconString());
+            ImGui.Text(BotanistSproutIcon);
         }
 
         if (_configuration.Advanced.AdditionalStatusInformation)

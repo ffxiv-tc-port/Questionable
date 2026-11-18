@@ -27,6 +27,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Quest = Questionable.Model.Quest;
 
@@ -819,9 +820,12 @@ internal sealed class QuestController : MiniTaskController<QuestController>
         _pendingStuckRecoveryReloadAt = DateTime.Now.AddSeconds(2);
     }
 
+    /// <summary><see cref="UpdateCurrentQuest"/> 每幀重用的延後清單；借出期間是 <see langword="null"/>（巢狀或並行的呼叫自己 new）。</summary>
+    private List<PendingLog>? _pendingLogPool = [];
+
     private void UpdateCurrentQuest()
     {
-        List<PendingLog> pending = [];
+        List<PendingLog> pending = Interlocked.Exchange(ref _pendingLogPool, null) ?? [];
         List<PendingLog>? previousScope = _deferralScope;
         _deferralScope = pending;
         try
@@ -836,6 +840,8 @@ internal sealed class QuestController : MiniTaskController<QuestController>
             // 自己在寫記錄，那些沒有被延後 ⇒ 這裡延後的幾行相對於它們會往後挪；
             // 延後的這幾行彼此之間的先後順序不變。
             EmitPending(pending);
+            // EmitPending 擲例外就走不到這裡：沒寫完的那份不放回去重用。
+            Volatile.Write(ref _pendingLogPool, pending);
         }
     }
 
@@ -947,14 +953,10 @@ internal sealed class QuestController : MiniTaskController<QuestController>
                         out string? questHint);
                 if (questHint != null)
                 {
-                    RunOrDefer(() => _questFunctions.PrintHintThrottled(questHint));
+                    DeferQuestHint(questHint);
                 }
 
-                (ElementId, byte)? priorityQuestOption =
-                    ManualPriorityQuests
-                        .Where(x => _questFunctions.IsReadyToAcceptQuest(x.Id) || _questFunctions.IsQuestAccepted(x.Id))
-                        .Select(x => (x.Id, _questFunctions.GetQuestProgressInfo(x.Id)?.Sequence ?? 0))
-                        .FirstOrDefault();
+                (ElementId, byte)? priorityQuestOption = FirstManualPriorityQuest();
                 string questSource = "任務清單／主線";
                 if (priorityQuestOption is { Item1: not null } priorityQuest)
                 {
@@ -1164,6 +1166,29 @@ internal sealed class QuestController : MiniTaskController<QuestController>
 
             DebugState = null;
         }
+    }
+
+    /// <summary>
+    /// 與 <c>ManualPriorityQuests.Where(可接或已接).Select((Id, 序列)).FirstOrDefault()</c> 同結果但不配置：
+    /// 沒有符合的回 <c>default</c>（<c>Item1</c> 是 <see langword="null"/>），序列只查第一個符合的。
+    /// </summary>
+    private (ElementId, byte) FirstManualPriorityQuest()
+    {
+        foreach(Quest x in CollectionsMarshal.AsSpan(ManualPriorityQuests))
+        {
+            if (_questFunctions.IsReadyToAcceptQuest(x.Id) || _questFunctions.IsQuestAccepted(x.Id))
+            {
+                return (x.Id, _questFunctions.GetQuestProgressInfo(x.Id)?.Sequence ?? 0);
+            }
+        }
+
+        return default;
+    }
+
+    /// <summary>閉包刻意放在這裡：寫在呼叫端的區塊裡，每幀一進那個區塊就配置一次（不管有沒有提示）。</summary>
+    private void DeferQuestHint(string questHint)
+    {
+        RunOrDefer(() => _questFunctions.PrintHintThrottled(questHint));
     }
 
     public (QuestSequence? Sequence, QuestStep? Step, bool createTasks) GetNextStep()

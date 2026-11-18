@@ -256,8 +256,14 @@ internal abstract class MiniTaskController<T> : IDisposable
     {
     }
 
+    /// <remarks>沒有剩餘工作時回共用的空陣列（唯讀）：主視窗每幀都問，呼叫端只讀不改。</remarks>
     public virtual IList<string> GetRemainingTaskNames()
     {
+        if (!_taskQueue.RemainingTasks.Any())
+        {
+            return Array.Empty<string>();
+        }
+
         return _taskQueue.RemainingTasks.Select(x => x.ToString() ?? "?").ToList();
     }
 

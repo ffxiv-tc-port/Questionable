@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using GrandCompany = FFXIVClientStructs.FFXIV.Client.UI.Agent.GrandCompany;
 using Quest = Questionable.Model.Quest;
 using static Questionable.Utils.CacheUtils;
@@ -206,7 +207,55 @@ internal sealed unsafe class QuestFunctions
         }
     }
 
+    /// <summary><see cref="GetCurrentQuestInternal(bool)"/> 每幀重用的追蹤清單；借出期間是 <see langword="null"/>（並行的呼叫自己 new）。</summary>
+    private List<(ElementId Quest, byte Sequence)>? _trackedQuestsPool = [];
+
+    /// <summary>追蹤欄位上一次建的 <see cref="QuestId"/>，任務編號沒變就沿用（<see cref="ElementId"/> 不可變、以值比較）。</summary>
+    private readonly QuestId?[] _trackedQuestIds = new QuestId?[16];
+
+    private QuestId? _lastScenarioQuestId;
+
     public QuestReference GetCurrentQuestInternal(bool allowNewMsq)
+    {
+        List<(ElementId Quest, byte Sequence)> trackedQuests =
+            Interlocked.Exchange(ref _trackedQuestsPool, null) ?? [];
+        try
+        {
+            return GetCurrentQuestInternal(allowNewMsq, trackedQuests);
+        }
+        finally
+        {
+            trackedQuests.Clear();
+            Volatile.Write(ref _trackedQuestsPool, trackedQuests);
+        }
+    }
+
+    private static QuestId ReuseQuestId(ref QuestId? slot, ushort questId)
+    {
+        QuestId? cached = slot;
+        if (cached == null || cached.Value != questId)
+        {
+            cached = new QuestId(questId);
+            slot = cached;
+        }
+
+        return cached;
+    }
+
+    /// <summary>
+    /// 追蹤清單第一個以外、交給同一個友好部族的任務（新清單，呼叫端可以改）。
+    /// 閉包刻意放在這裡：寫在呼叫端的區塊裡，每幀只要有追蹤任務就配置一次。
+    /// </summary>
+    private List<(ElementId Quest, byte Sequence)> GetOtherTrackedQuestsForSociety(
+        List<(ElementId Quest, byte Sequence)> trackedQuests, EAlliedSociety society)
+    {
+        return trackedQuests.Skip(1)
+            .Where(quest => _alliedSocietyData.GetCommonAlliedSocietyTurnIn(quest.Quest) == society)
+            .ToList();
+    }
+
+    private QuestReference GetCurrentQuestInternal(bool allowNewMsq,
+        List<(ElementId Quest, byte Sequence)> trackedQuests)
     {
         QuestManager* questManager = QuestManager.Instance();
         if (questManager == null)
@@ -216,7 +265,7 @@ internal sealed unsafe class QuestFunctions
 
         // always prioritize accepting MSQ quests, to make sure we don't turn in one MSQ quest and then go off to do
         // side quests until the end of time.
-        (QuestReference msqQuest, string? _) = GetMainScenarioQuest();
+        (QuestReference msqQuest, string? _) = GetMainScenarioQuest(includeDetail: false);
         if (msqQuest.CurrentQuest != null && !_questRegistry.IsKnownQuest(msqQuest.CurrentQuest))
         {
             msqQuest = QuestReference.NoQuest(msqQuest.State);
@@ -238,7 +287,6 @@ internal sealed unsafe class QuestFunctions
         // do the MSQ; if a side quest is the first item do that side quest.
         //
         // If no quests are marked as 'priority', accepting a new quest adds it to the top of the list.
-        List<(ElementId Quest, byte Sequence)> trackedQuests = [];
         for(int i = questManager->TrackedQuests.Length - 1; i >= 0; --i)
         {
             ElementId currentQuest;
@@ -246,7 +294,10 @@ internal sealed unsafe class QuestFunctions
             switch (trackedQuest.QuestType)
             {
                 case 1: // normal quest
-                    currentQuest = new QuestId(questManager->NormalQuests[trackedQuest.Index].QuestId);
+                    ushort trackedQuestId = questManager->NormalQuests[trackedQuest.Index].QuestId;
+                    currentQuest = i < _trackedQuestIds.Length
+                        ? ReuseQuestId(ref _trackedQuestIds[i], trackedQuestId)
+                        : new QuestId(trackedQuestId);
                     if (_questRegistry.IsKnownQuest(currentQuest))
                     {
                         trackedQuests.Add((currentQuest, QuestManager.GetQuestSequence(currentQuest.Value)));
@@ -261,7 +312,20 @@ internal sealed unsafe class QuestFunctions
         if (_configuration.General.SkipLowPriorityDuties && trackedQuests.Count > 0)
         {
             IReadOnlyList<(uint ContentFinderConditionId, ElementId QuestId, int Sequence)> lowPriorityQuests = _questRegistry.LowPriorityContentFinderConditionQuests;
-            trackedQuests.RemoveAll(x => lowPriorityQuests.Any(y => x.Quest == y.QuestId && x.Sequence == y.Sequence));
+            // 與 RemoveAll(x => lowPriorityQuests.Any(…)) 同結果（留下的保持原順序），但不配置閉包。
+            for(int i = trackedQuests.Count - 1; i >= 0; --i)
+            {
+                (ElementId Quest, byte Sequence) x = trackedQuests[i];
+                for(int j = 0; j < lowPriorityQuests.Count; ++j)
+                {
+                    (uint ContentFinderConditionId, ElementId QuestId, int Sequence) y = lowPriorityQuests[j];
+                    if (x.Quest == y.QuestId && x.Sequence == y.Sequence)
+                    {
+                        trackedQuests.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
         }
 
         if (trackedQuests.Count > 0)
@@ -272,10 +336,8 @@ internal sealed unsafe class QuestFunctions
                 _alliedSocietyData.GetCommonAlliedSocietyTurnIn(firstTrackedQuest);
             if (firstTrackedAlliedSociety != EAlliedSociety.None)
             {
-                List<(ElementId Quest, byte Sequence)> alliedQuestsForSameSociety = trackedQuests.Skip(1)
-                    .Where(quest =>
-                        _alliedSocietyData.GetCommonAlliedSocietyTurnIn(quest.Quest) == firstTrackedAlliedSociety)
-                    .ToList();
+                List<(ElementId Quest, byte Sequence)> alliedQuestsForSameSociety =
+                    GetOtherTrackedQuestsForSociety(trackedQuests, firstTrackedAlliedSociety);
                 if (alliedQuestsForSameSociety.Count > 0)
                 {
                     if (firstTrackedSequence == 255)
@@ -389,7 +451,13 @@ internal sealed unsafe class QuestFunctions
                addon->AtkValues[0].UInt is 0 or 2 or 3 or 4;
     }
 
-    public (QuestReference, string?) GetMainScenarioQuest()
+    public (QuestReference, string?) GetMainScenarioQuest() => GetMainScenarioQuest(includeDetail: true);
+
+    /// <param name="includeDetail">
+    /// <see langword="false"/>＝呼叫端丟掉第二個值：要另外組的說明字串回 <see langword="null"/>（每幀的路徑不組），
+    /// 常數字串照回；第一個值與副作用不受影響。
+    /// </param>
+    private (QuestReference, string?) GetMainScenarioQuest(bool includeDetail)
     {
         if (_configuration.Advanced.StopMSQ)
         {
@@ -422,8 +490,8 @@ internal sealed unsafe class QuestFunctions
             return (QuestReference.NoQuest(MainScenarioQuestState.LoadingScreen), "Scenario Tree Data is null");
         }
 
-        QuestId currentQuest = new(scenarioTree->Data->CurrentScenarioQuest);
-        string extraData = $"sq: {currentQuest}";
+        QuestId currentQuest = ReuseQuestId(ref _lastScenarioQuestId, scenarioTree->Data->CurrentScenarioQuest);
+        string? extraData = includeDetail ? $"sq: {currentQuest}" : null;
         if (currentQuest.Value == 0)
         {
             if (IsMainScenarioQuestComplete())
@@ -474,8 +542,9 @@ internal sealed unsafe class QuestFunctions
                 }
                 if (potentialQuests.Count != 1)
                 {
-                    return (QuestReference.NoQuest(MainScenarioQuestState.Unavailable), "Multiple potential quests found: " +
-                                                                                        string.Join(", ", potentialQuests.Select(x => x.QuestId.Value)));
+                    return (QuestReference.NoQuest(MainScenarioQuestState.Unavailable), includeDetail
+                        ? "Multiple potential quests found: " + string.Join(", ", potentialQuests.Select(x => x.QuestId.Value))
+                        : null);
                 }
             }
             else
@@ -496,11 +565,11 @@ internal sealed unsafe class QuestFunctions
         // but this is just really hoping that this breaks nothing.
         if (IsQuestComplete(currentQuest))
         {
-            return (new(currentQuest, 255, MainScenarioQuestState.Available), $"Quest {currentQuest.Value} complete");
+            return (new(currentQuest, 255, MainScenarioQuestState.Available), includeDetail ? $"Quest {currentQuest.Value} complete" : null);
         }
         else if (!IsReadyToAcceptQuest(currentQuest))
         {
-            return (QuestReference.NoQuest(MainScenarioQuestState.Unavailable), $"Not readdy to accept quest {currentQuest.Value}");
+            return (QuestReference.NoQuest(MainScenarioQuestState.Unavailable), includeDetail ? $"Not readdy to accept quest {currentQuest.Value}" : null);
         }
 
         short currentLevel = PlayerState.Instance()->CurrentLevel;
@@ -1026,7 +1095,15 @@ internal sealed unsafe class QuestFunctions
 
         if (questInfo.QuestLocks.Count > 0)
         {
-            int completedQuests = questInfo.QuestLocks.Count(x => IsQuestComplete(x) || x.Equals(extraCompletedQuest));
+            // 不用 Count(lambda)：它捕獲參數，整個方法一進來就配置閉包（每幀經 IsReadyToAcceptQuest 走到）。
+            int completedQuests = 0;
+            foreach(QuestId x in questInfo.QuestLocks)
+            {
+                if (IsQuestComplete(x) || x.Equals(extraCompletedQuest))
+                {
+                    completedQuests++;
+                }
+            }
             if (questInfo.QuestLockJoin == EQuestJoin.All && questInfo.QuestLocks.Count == completedQuests)
             {
                 return true;
@@ -1140,8 +1217,15 @@ internal sealed unsafe class QuestFunctions
             return true;
         }
 
-        int completedQuests = questInfo.PreviousQuests.Count(x =>
-            HasEnoughProgressOnPreviousQuest(x) || x.QuestId.Equals(extraCompletedQuest));
+        // 不用 Count(lambda)：理由同 IsQuestUnobtainable。
+        int completedQuests = 0;
+        foreach(PreviousQuestInfo x in questInfo.PreviousQuests)
+        {
+            if (HasEnoughProgressOnPreviousQuest(x) || x.QuestId.Equals(extraCompletedQuest))
+            {
+                completedQuests++;
+            }
+        }
         if (questInfo.PreviousQuestJoin == EQuestJoin.All &&
             questInfo.PreviousQuests.Count == completedQuests)
         {

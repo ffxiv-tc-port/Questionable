@@ -10,6 +10,7 @@ using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Microsoft.Extensions.Logging;
 using Questionable.Controller;
+using Questionable.Controller.Steps;
 using Questionable.Controller.Steps.Shared;
 using Questionable.Functions;
 using Questionable.Model;
@@ -55,7 +56,44 @@ internal sealed partial class ActiveQuestComponent
     [GeneratedRegex(@"\s\s+", RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex MultipleWhitespaceRegex();
 
+    // ToIconString() 每次都 new 一個字串，而這兩個圖示每幀都畫。
+    private static readonly string ClockIcon = SeIconChar.Clock.ToIconString();
+    private static readonly string HyadelynIcon = SeIconChar.Hyadelyn.ToIconString();
+
     public event EventHandler? Reload;
+
+    /// <summary>
+    /// 與 <c>ImGui.Text(_questController.ToStatString())</c> 同一段文字，但直接內插進 ImGui 的緩衝區：
+    /// 沒有工作時（停著）不配置字串。改 <see cref="QuestController.ToStatString"/> 的格式要兩邊一起改。
+    /// </summary>
+    private void DrawStatString()
+    {
+        TaskQueue taskQueue = _questController.TaskQueue;
+        if (taskQueue.CurrentTaskExecutor?.CurrentTask is { } currentTask)
+        {
+            ImGui.Text($"{currentTask} (+{taskQueue.RemainingTasks.Count()})");
+        }
+        else
+        {
+            ImGui.Text($"- (+{taskQueue.RemainingTasks.Count()})");
+        }
+    }
+
+    /// <summary>與 <c>QuestsToStopAfter.Any(未完成且可取得)</c> 同結果；捕獲 this 的 lambda 每幀都會 new 委派。</summary>
+    private bool HasPendingStopQuest()
+    {
+        List<ElementId> questsToStopAfter = _configuration.Stop.QuestsToStopAfter;
+        ArgumentNullException.ThrowIfNull(questsToStopAfter, "source");
+        foreach(ElementId x in questsToStopAfter)
+        {
+            if (!_questFunctions.IsQuestComplete(x) && !_questFunctions.IsQuestUnobtainable(x))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public void Draw(bool isMinimized)
     {
@@ -101,7 +139,7 @@ internal sealed partial class ActiveQuestComponent
 
                     //var nextStep = _questController.GetNextStep();
                     //ImGui.BeginDisabled(nextStep.Step == null);
-                    ImGui.Text(_questController.ToStatString());
+                    DrawStatString();
                     //ImGui.EndDisabled();
                 }
 
@@ -220,7 +258,7 @@ internal sealed partial class ActiveQuestComponent
 
                 bool hasLevelCondition = _configuration.Stop.Enabled && _configuration.Stop.LevelToStopAfter;
                 bool hasQuestConditions = _configuration.Stop.Enabled &&
-                                          _configuration.Stop.QuestsToStopAfter.Any(x => !_questFunctions.IsQuestComplete(x) && !_questFunctions.IsQuestUnobtainable(x));
+                                          HasPendingStopQuest();
 
                 if (hasLevelCondition || hasQuestConditions)
                 {
@@ -245,7 +283,7 @@ internal sealed partial class ActiveQuestComponent
                         }
                     }
 
-                    ImGui.TextColored(iconColor, SeIconChar.Clock.ToIconString());
+                    ImGui.TextColored(iconColor, ClockIcon);
                     if (ImGui.IsItemHovered())
                     {
                         using var tooltip = ImRaii.Tooltip();
@@ -310,7 +348,7 @@ internal sealed partial class ActiveQuestComponent
                 if (anyAvailable || anyUnavailable)
                 {
                     ImGui.SameLine();
-                    ImGui.TextColored(ImGuiColors.DalamudYellow, SeIconChar.Hyadelyn.ToIconString());
+                    ImGui.TextColored(ImGuiColors.DalamudYellow, HyadelynIcon);
                     if (ImGui.IsItemHovered())
                     {
                         List<ElementId> availablePriorityQuests = priorityQuests
