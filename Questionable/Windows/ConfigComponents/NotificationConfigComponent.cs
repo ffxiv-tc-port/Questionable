@@ -5,6 +5,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Utility;
 using ECommons.LanguageHelpers;
+using Questionable.External;
 using System;
 using System.Linq;
 namespace Questionable.Windows.ConfigComponents;
@@ -12,7 +13,8 @@ namespace Questionable.Windows.ConfigComponents;
 internal sealed class NotificationConfigComponent
 (
     IDalamudPluginInterface pluginInterface,
-    Configuration configuration) : ConfigComponent(pluginInterface, configuration)
+    Configuration configuration,
+    NotificationMasterIpc notificationMasterIpc) : ConfigComponent(pluginInterface, configuration)
 {
     private static readonly XivChatType[] XivChatTypes = Enum.GetValues<XivChatType>()
         .Where(x => x != XivChatType.StandardEmote)
@@ -51,9 +53,17 @@ internal sealed class NotificationConfigComponent
                 }
 
                 ImGui.Separator();
+                bool notificationMasterLoaded = notificationMasterIpc.IsLoadedCached();
                 ImGui.Text("Desktop notifications".Loc());
-                DisabledAwareTooltip.HelpMarker("Desktop tray and taskbar notifications are currently unavailable.".Loc());
-                using (ImRaii.Disabled())
+                DisabledAwareTooltip.HelpMarker(
+                    "Requires the plugin 'NotificationMaster' to be installed and enabled. Sent together with the chat notification above.".Loc());
+                if (!notificationMasterLoaded)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextDisabled("(NotificationMaster is not loaded)".Loc());
+                }
+
+                using (ImRaii.Disabled(!notificationMasterLoaded))
                 {
                     bool showTrayMessage = Configuration.Notifications.ShowTrayMessage;
                     if (ImGui.Checkbox("Show tray notification".Loc(), ref showTrayMessage))

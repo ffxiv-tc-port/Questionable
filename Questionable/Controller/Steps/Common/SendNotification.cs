@@ -73,6 +73,7 @@ internal static class SendNotification
         IChatGui chatGui,
         Configuration configuration,
         TataruPraiseIpc tataruPraiseIpc,
+        NotificationMasterIpc notificationMasterIpc,
         EnableDutyLinkHandler enableDutyLinkHandler) : TaskExecutor<Task>
     {
         protected override bool Start()
@@ -169,6 +170,7 @@ internal static class SendNotification
                 chatGui.Print(message);
             }
 
+            notificationMasterIpc.Notify(text);
             return true;
         }
 

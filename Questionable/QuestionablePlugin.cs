@@ -173,6 +173,7 @@ public sealed class QuestionablePlugin : IDalamudPlugin
         serviceCollection.AddSingleton<YesAlreadyIpc>();
         serviceCollection.AddSingleton<StylistIpc>();
         serviceCollection.AddSingleton<TataruPraiseIpc>();
+        serviceCollection.AddSingleton<NotificationMasterIpc>();
         serviceCollection.AddSingleton<IAutoHookIpc, AutoHookIpc>();
 
         serviceCollection.AddSingleton<GearStatsCalculator>();
