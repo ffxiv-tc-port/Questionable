@@ -2,10 +2,12 @@
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Functions;
@@ -68,11 +70,17 @@ internal sealed class PriorityWindow : LWindow
 
         Size = new Vector2(400, 400);
         SizeCondition = ImGuiCond.Once;
+    }
+
+    public override void PreDraw()
+    {
+        // 最小尺寸跟字級走；Window 會再乘 GlobalScale，所以先除掉。
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new(400, 30),
+            MinimumSize = new Vector2(400, 30).Scale() / ImGuiHelpers.GlobalScale,
             MaximumSize = default
         };
+        base.PreDraw();
     }
 
     public override void DrawContent()

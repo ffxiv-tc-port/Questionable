@@ -1,11 +1,14 @@
 ﻿using Dalamud.Interface.Utility.Raii;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Questionable.Controller;
 using Questionable.Windows.Common;
 using Questionable.Windows.JournalComponents;
 using System;
+using System.Numerics;
 namespace Questionable.Windows;
 
 internal sealed class JournalProgressWindow : LWindow, IDisposable
@@ -38,11 +41,16 @@ internal sealed class JournalProgressWindow : LWindow, IDisposable
         _clientState.Logout += _questJournalComponent.ClearCounts;
         _clientState.Logout += _gatheringJournalComponent.ClearCounts;
         _questRegistry.Reloaded += OnQuestsReloaded;
+    }
 
+    public override void PreDraw()
+    {
+        // 最小尺寸跟字級走；Window 會再乘 GlobalScale，所以先除掉。
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new(200, 100)
+            MinimumSize = new Vector2(200, 100).Scale() / ImGuiHelpers.GlobalScale
         };
+        base.PreDraw();
     }
 
     public void Dispose()

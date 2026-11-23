@@ -3,10 +3,12 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI;
@@ -72,10 +74,16 @@ internal sealed class QuestSelectionWindow : LWindow
 
         Size = new Vector2(500, 200);
         SizeCondition = ImGuiCond.Once;
+    }
+
+    public override void PreDraw()
+    {
+        // 最小尺寸跟字級走；Window 會再乘 GlobalScale，所以先除掉。
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new(500, 200)
+            MinimumSize = new Vector2(500, 200).Scale() / ImGuiHelpers.GlobalScale
         };
+        base.PreDraw();
     }
 
     public unsafe void OpenForTarget(IGameObject? gameObject)
@@ -185,7 +193,7 @@ internal sealed class QuestSelectionWindow : LWindow
                                2 * ImGui.GetStyle().ItemSpacing.X;
         ImGui.PopFont();
 
-        ImGui.TableSetupColumn("Id".Loc(), ImGuiTableColumnFlags.WidthFixed, 50 * ImGui.GetIO().FontGlobalScale);
+        ImGui.TableSetupColumn("Id".Loc(), ImGuiTableColumnFlags.WidthFixed, 50f.Scale());
         ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, statusIconSize);
         ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.None, 200);
         ImGui.TableSetupColumn("Actions".Loc(), ImGuiTableColumnFlags.WidthFixed, actionIconSize);

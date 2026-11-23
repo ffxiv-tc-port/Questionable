@@ -87,8 +87,8 @@ internal sealed class QuestJournalComponent
             }
 
             ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.NoHide);
-            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
-            ImGui.TableSetupColumn("Completed".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
+            ImGui.TableSetupColumn("Completed".Loc(), ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
             ImGui.TableHeadersRow();
 
             foreach(FilteredSection section in _filteredSections)

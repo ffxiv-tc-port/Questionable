@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons.ExcelServices;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using Lumina.Excel.Sheets;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,7 @@ using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using Quest = Questionable.Model.Quest;
 
@@ -638,7 +640,7 @@ internal sealed class SinglePlayerDutyConfigComponent
         if (table)
         {
             ImGui.TableSetupColumn("Quest".Loc(), ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Options".Loc(), ImGuiTableColumnFlags.WidthFixed, 200f);
+            ImGui.TableSetupColumn("Options".Loc(), ImGuiTableColumnFlags.WidthFixed, 200f.Scale());
 
             foreach(SinglePlayerDutyInfo dutyInfo in dutyInfos)
             {
@@ -713,7 +715,7 @@ internal sealed class SinglePlayerDutyConfigComponent
 
     private static ImRaii.IEndObject BeginChildArea()
     {
-        return ImRaii.Child("DutyConfiguration", new(675, 400), true);
+        return ImRaii.Child("DutyConfiguration", new Vector2(675, 400).Scale(), true);
     }
 
     private void DrawEnableAllButton()

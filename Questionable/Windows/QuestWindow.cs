@@ -1,9 +1,11 @@
 ﻿using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using Questionable.Controller;
 using Questionable.Controller.GameUi;
@@ -11,6 +13,7 @@ using Questionable.Data;
 using Questionable.Windows.Common;
 using Questionable.Windows.QuestComponents;
 using System;
+using System.Numerics;
 namespace Questionable.Windows;
 
 internal sealed class QuestWindow : LWindow, IPersistableWindowConfig
@@ -69,11 +72,6 @@ internal sealed class QuestWindow : LWindow, IPersistableWindowConfig
         _framework = framework;
         _interactionUiController = interactionUiController;
 
-        SizeConstraints = new WindowSizeConstraints
-        {
-            MinimumSize = new(240, 30),
-            MaximumSize = default
-        };
         RespectCloseHotkey = false;
         AllowClickthrough = false;
 
@@ -131,6 +129,17 @@ internal sealed class QuestWindow : LWindow, IPersistableWindowConfig
             Flags &= ~ImGuiWindowFlags.NoCollapse;
             ShowCloseButton = true;
         }
+    }
+
+    public override void PreDraw()
+    {
+        // 最小尺寸跟字級走；Window 會再乘 GlobalScale，所以先除掉。
+        SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(240, 30).Scale() / ImGuiHelpers.GlobalScale,
+            MaximumSize = default
+        };
+        base.PreDraw();
     }
 
     public override bool DrawConditions()

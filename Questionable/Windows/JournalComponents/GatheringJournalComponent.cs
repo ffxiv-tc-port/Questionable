@@ -5,6 +5,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons.ExcelServices;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel;
@@ -191,8 +192,8 @@ internal sealed class GatheringJournalComponent
             }
 
             ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.NoHide);
-            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
-            ImGui.TableSetupColumn("Collected".Loc(), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
+            ImGui.TableSetupColumn("Supported".Loc(), ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
+            ImGui.TableSetupColumn("Collected".Loc(), ImGuiTableColumnFlags.WidthFixed, 100f.Scale());
             ImGui.TableHeadersRow();
 
             foreach(FilteredExpansion expansion in _filteredExpansions)

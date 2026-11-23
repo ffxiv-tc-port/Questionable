@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using Lumina.Excel.Sheets;
 using Questionable.Controller;
@@ -17,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 namespace Questionable.Windows.ConfigComponents;
 
@@ -116,7 +118,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
 
     private void DrawConfigTable(bool runInstancedContentWithAutoDuty)
     {
-        using var child = ImRaii.Child("DutyConfiguration", new(650, 400), true);
+        using var child = ImRaii.Child("DutyConfiguration", new Vector2(650, 400).Scale(), true);
         if (!child)
         {
             return;
@@ -146,7 +148,7 @@ internal sealed class DutyConfigComponent : ConfigComponent
                 if (table)
                 {
                     ImGui.TableSetupColumn("Name".Loc(), ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableSetupColumn("Options".Loc(), ImGuiTableColumnFlags.WidthFixed, 200f);
+                    ImGui.TableSetupColumn("Options".Loc(), ImGuiTableColumnFlags.WidthFixed, 200f.Scale());
 
                     if (_contentFinderConditionNames.TryGetValue(expansion, out List<DutyInfo>? cfcNames))
                     {

@@ -2,9 +2,11 @@
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
+using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using FFXIVClientStructs.FFXIV.Common.Math;
 using Questionable.Controller;
@@ -34,10 +36,16 @@ internal sealed class QuestValidationWindow : LWindow
 
         Size = new Vector2(600, 200);
         SizeCondition = ImGuiCond.Once;
+    }
+
+    public override void PreDraw()
+    {
+        // 最小尺寸跟字級走；Window 會再乘 GlobalScale，所以先除掉。
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(600, 200)
+            MinimumSize = new System.Numerics.Vector2(600, 200).Scale() / ImGuiHelpers.GlobalScale
         };
+        base.PreDraw();
     }
 
     public override void DrawContent()
@@ -49,10 +57,10 @@ internal sealed class QuestValidationWindow : LWindow
             return;
         }
 
-        ImGui.TableSetupColumn("Quest".Loc(), ImGuiTableColumnFlags.WidthFixed, 50);
+        ImGui.TableSetupColumn("Quest".Loc(), ImGuiTableColumnFlags.WidthFixed, 50f.Scale());
         ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 200);
-        ImGui.TableSetupColumn("Seq".Loc(), ImGuiTableColumnFlags.WidthFixed, 30);
-        ImGui.TableSetupColumn("Step".Loc(), ImGuiTableColumnFlags.WidthFixed, 30);
+        ImGui.TableSetupColumn("Seq".Loc(), ImGuiTableColumnFlags.WidthFixed, 30f.Scale());
+        ImGui.TableSetupColumn("Step".Loc(), ImGuiTableColumnFlags.WidthFixed, 30f.Scale());
         ImGui.TableSetupColumn("Issue".Loc(), ImGuiTableColumnFlags.None, 200);
         ImGui.TableHeadersRow();
 
