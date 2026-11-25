@@ -1,8 +1,8 @@
 ﻿{
   "Name": "Questionable",
   "Author": "liza, qstxiv, & various contributors",
-  "Punchline": "自動跑任務助手，導航並完成任務",
-  "Description": "自動跑任務插件：\n- 自動導航至任務目標並完成對話、互動與戰鬥觸發\n- 支援主線／支線任務、部分部落任務與採集類任務\n- 提供任務執行優先順序與除錯視窗\n- 需搭配 vnavmesh、TextAdvance、Lifestream 使用",
+  "Punchline": "自動導航並完成主線、支線等任務。",
+  "Description": "自動跑任務的插件：按下開始後依序導航到任務目標，處理對話、互動與戰鬥，隨時可停止。\n- 支援主線與支線任務、部分友好部族任務與採集類任務\n- 需搭配 vnavmesh、Lifestream、TextAdvance，以及一款戰鬥插件（BossModReborn 等）\n- 友好部族日常：一次排多個任務時先做最近的目標，排入的任務全部交完就停下\n- 自動接續（預設關）：沒有任務可做時繼續等下一個任務\n- 走到需要手動處理的步驟會停下並提示，可搭配 NotificationMaster 跳系統通知、TataruPraise 出聲提醒\n- 指令 /qst 開啟任務視窗，/qst start、/qst stop 開始與停止",
   "Tags": [
     "quests",
     "msq"
